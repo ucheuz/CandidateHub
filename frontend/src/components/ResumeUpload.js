@@ -22,9 +22,9 @@ const ResumeUpload = () => {
     }
 
     // Validate file type
-    const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    const allowedTypes = ['application/pdf', 'text/plain'];
     if (!allowedTypes.includes(file.type)) {
-      alert('Please upload a PDF or Word document');
+      alert('Please upload a PDF file or plain text document');
       return;
     }
 

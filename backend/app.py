@@ -31,7 +31,7 @@ except Exception:
 
 # Initialize Gemini
 genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
-model = genai.GenerativeModel('gemini-pro')
+model = genai.GenerativeModel('gemini-2.5-flash')  # Updated model name
 
 @app.route('/api/job', methods=['POST'])
 def create_job():
@@ -197,22 +197,58 @@ def evaluate_resume(job_id, resume_id):
             print(f"Error fetching resume data: {str(e)}")
             return jsonify({"error": "Failed to fetch resume data"}), 500
 
-        # Download resume from Azure Blob
+        # Download and process resume from Azure Blob
         try:
             blob_client = blob_service_client.get_blob_client(
                 container=container_name,
                 blob=resume_data['blob_path']
             )
-            resume_content = blob_client.download_blob().readall().decode('utf-8')
-            print(f"Successfully downloaded resume content of length: {len(resume_content)}")
+            file_content = blob_client.download_blob().readall()
+            print(f"Successfully downloaded resume content of length: {len(file_content)}")
+
+            # Import here to avoid loading unless needed
+            from PyPDF2 import PdfReader
+            from io import BytesIO
+            
+            resume_text = ""
+            try:
+                # Try to read as PDF
+                pdf_file = BytesIO(file_content)
+                pdf_reader = PdfReader(pdf_file)
+                
+                # Extract text from all pages
+                for page in pdf_reader.pages:
+                    resume_text += page.extract_text() + "\n"
+                    
+            except Exception as pdf_error:
+                print(f"Error reading as PDF, trying as plain text: {str(pdf_error)}")
+                try:
+                    # Try to decode as plain text with different encodings
+                    for encoding in ['utf-8', 'latin-1', 'ascii']:
+                        try:
+                            resume_text = file_content.decode(encoding)
+                            break
+                        except UnicodeDecodeError:
+                            continue
+                    
+                    if not resume_text:
+                        raise ValueError("Could not decode file content with any encoding")
+                        
+                except Exception as text_error:
+                    print(f"Error reading as text: {str(text_error)}")
+                    return jsonify({"error": "Unable to read resume content. Please ensure the file is a PDF or text document."}), 500
+
+            print(f"Successfully extracted text content of length: {len(resume_text)}")
+            resume_content = resume_text
+
         except Exception as e:
-            print(f"Error downloading resume from Azure: {str(e)}")
-            return jsonify({"error": "Failed to download resume content"}), 500
+            print(f"Error processing resume content: {str(e)}")
+            return jsonify({"error": "Failed to process resume content"}), 500
 
         # Use Gemini to evaluate
         try:
             prompt = f"""
-            Analyze this job candidate's fit for the position based on their resume and the job requirements.
+            You are an expert HR professional and talent evaluator. Analyze this job candidate's fit for the position based on their resume and the job requirements.
 
             Job Description:
             {job_data['description']}
@@ -223,18 +259,35 @@ def evaluate_resume(job_id, resume_id):
             Resume Content:
             {resume_content}
             
-            Please evaluate the candidate and provide:
-            1. Match Score (0-100)
-            2. Key Skills Match
-            3. Experience Relevance
-            4. Areas of Strength
-            5. Areas for Improvement
+            Provide a detailed evaluation in the following format:
+
+            Match Score: [0-100]
             
-            Format your response in clear sections.
+            Key Skills Match:
+            - [List matching skills found in resume]
+            
+            Experience Relevance:
+            - [Analyze how relevant the candidate's experience is]
+            
+            Areas of Strength:
+            - [List key strengths]
+            
+            Areas for Improvement:
+            - [List areas where candidate could improve]
+            
+            Provide specific examples from the resume to support your evaluation.
             """
 
             print("Sending prompt to Gemini API...")
-            response = model.generate_content(prompt)
+            response = model.generate_content(
+                prompt,
+                generation_config={
+                    'temperature': 0.7,
+                    'top_p': 0.8,
+                    'top_k': 40,
+                    'max_output_tokens': 2048,
+                }
+            )
             evaluation = response.text
             print("Received response from Gemini API")
 
