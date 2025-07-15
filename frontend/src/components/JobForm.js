@@ -13,6 +13,7 @@ const JobForm = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    console.log('Submitting form data:', formData);
     try {
       const response = await axios.post('http://localhost:5000/api/job', formData);
       if (response.status === 201) {
@@ -28,7 +29,8 @@ const JobForm = () => {
       }
     } catch (error) {
       console.error('Error creating job:', error);
-      alert('Error creating job. Please try again.');
+      const errorMessage = error.response?.data?.error || error.message;
+      alert(`Error creating job: ${errorMessage}`);
     }
   };
 
