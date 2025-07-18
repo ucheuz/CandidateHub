@@ -133,7 +133,13 @@ const JobForm = () => {
         listedBy: formData.listedBy.trim(),
         hiringManagers: formData.hiringManagers.split(',').map(manager => manager.trim()).filter(Boolean),
         datePosted: serverDate,
-        dateHired: null
+        dateHired: null,
+        // AI evaluation fields
+        job_template: formData.job_template.trim(),
+        job_specification: formData.job_specification.trim(),
+        evaluation_criteria: formData.evaluation_criteria.trim(),
+        // Interview pipeline configuration
+        has_interview_3: formData.has_interview_3
       };
 
       console.log('Creating new job:', jobData);
@@ -735,7 +741,7 @@ const JobForm = () => {
                         Interview Pipeline
                       </Typography>
                       <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                        {formData.has_interview_3 ? 'Extended Pipeline (3 interviews)' : 'Standard Pipeline (2 interviews)'}
+                        {formData.has_interview_3 ? 'Extended (3 Interviews)' : 'Standard (2 Interviews)'}
                       </Typography>
                     </Box>
 

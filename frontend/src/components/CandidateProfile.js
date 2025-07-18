@@ -225,9 +225,16 @@ const CandidateProfile = () => {
   };
 
   // Get dynamic values based on job configuration
-  const hiringSteps = getHiringSteps(job?.has_interview_3);
-  const stageMapping = getStageMapping(job?.has_interview_3);
-  const stages = getStages(job?.has_interview_3);
+  const hasInterview3 = job?.has_interview_3 === true;
+  const hiringSteps = getHiringSteps(hasInterview3);
+  const stageMapping = getStageMapping(hasInterview3);
+  const stages = getStages(hasInterview3);
+
+  // Debug logging
+  console.log('Job data:', job);
+  console.log('Has Interview 3:', hasInterview3);
+  console.log('Hiring steps:', hiringSteps);
+  console.log('Stage mapping:', stageMapping);
 
   const getCurrentStep = (status) => {
     return stageMapping[status] || 0;
