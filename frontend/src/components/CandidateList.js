@@ -261,8 +261,9 @@ const CandidateList = () => {
           'NEW': 'New',
           'Evaluated': 'Evaluated',
           'Phone Screen': 'Screening',
-          'Technical Interview': 'Interview',
-          'Final Interview': 'Interview',
+          'Interview 1': 'Interview',
+          'Interview 2': 'Interview',
+          'Interview 3': 'Interview',
           'Hired': 'Hired',
           'Rejected': 'Rejected'
         };
@@ -403,11 +404,14 @@ const CandidateList = () => {
   }, [candidates, statusFilter]);
 
   // Calculate counts for each stage
+  const hasInterview3Candidates = candidates.some(c => c.status === 'Interview 3');
+  
   const stageCounts = {
     NEW: candidates.filter(c => !c.status || c.status === 'NEW' || c.status === 'Evaluated').length,
     SCREENING: candidates.filter(c => c.status === 'Phone Screen').length,
-    'INTERVIEW 1': candidates.filter(c => c.status === 'Technical Interview').length,
-    'INTERVIEW 2': candidates.filter(c => c.status === 'Final Interview').length,
+    'INTERVIEW 1': candidates.filter(c => c.status === 'Interview 1').length,
+    'INTERVIEW 2': candidates.filter(c => c.status === 'Interview 2').length,
+    ...(hasInterview3Candidates && { 'INTERVIEW 3': candidates.filter(c => c.status === 'Interview 3').length }),
     OFFERED: candidates.filter(c => c.status === 'Hired').length,
   };
 
@@ -518,8 +522,9 @@ const CandidateList = () => {
             'NEW': 'screening',
             'Evaluated': 'screening',
             'Phone Screen': 'screening',
-            'Technical Interview': 'interview',
-            'Final Interview': 'interview',
+            'Interview 1': 'interview',
+            'Interview 2': 'interview',
+            'Interview 3': 'interview',
             'Hired': 'offer',
             'Rejected': 'rejected'
           };

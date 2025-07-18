@@ -78,6 +78,7 @@ const formatFirestoreTimestamp = (timestamp) => {
 const CandidateProfile = () => {
   const { candidateId } = useParams();
   const [candidate, setCandidate] = useState(null);
+  const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState(0);
@@ -108,6 +109,20 @@ const CandidateProfile = () => {
         }
         const data = await response.json();
         setCandidate(data);
+        
+        // Fetch job information if candidate has a job_id
+        if (data.job_id) {
+          try {
+            const jobResponse = await fetch(`http://localhost:5000/api/job/${data.job_id}`);
+            if (jobResponse.ok) {
+              const jobData = await jobResponse.json();
+              setJob(jobData);
+            }
+          } catch (jobError) {
+            console.error('Error fetching job data:', jobError);
+            // Don't fail the whole component if job fetch fails
+          }
+        }
       } catch (err) {
         console.error('Error fetching candidate:', err);
         setError(err.message);
@@ -165,31 +180,60 @@ const CandidateProfile = () => {
     'Other'
   ];
 
-  const hiringSteps = [
-    'Application',
-    'Initial Review',
-    'Phone Screen',
-    'Technical Interview',
-    'Final Interview',
-    'Decision'
-  ];
-
-  const stageMapping = {
-    'NEW': 0,
-    'Evaluated': 1,
-    'Phone Screen': 2,
-    'Technical Interview': 3,
-    'Final Interview': 4,
-    'Hired': 5,
-    'Rejected': -1
+  const getHiringSteps = (hasInterview3) => {
+    const baseSteps = [
+      'Application',
+      'Initial Review',
+      'Phone Screen',
+      'Interview 1',
+      'Interview 2'
+    ];
+    
+    if (hasInterview3) {
+      return [...baseSteps, 'Interview 3', 'Decision'];
+    }
+    
+    return [...baseSteps, 'Decision'];
   };
+
+  const getStageMapping = (hasInterview3) => {
+    const baseMapping = {
+      'NEW': 0,
+      'Evaluated': 1,
+      'Phone Screen': 2,
+      'Interview 1': 3,
+      'Interview 2': 4,
+      'Hired': hasInterview3 ? 6 : 5,
+      'Rejected': -1
+    };
+    
+    if (hasInterview3) {
+      baseMapping['Interview 3'] = 5;
+    }
+    
+    return baseMapping;
+  };
+
+  const getStages = (hasInterview3) => {
+    const baseStages = ['NEW', 'Evaluated', 'Phone Screen', 'Interview 1', 'Interview 2'];
+    
+    if (hasInterview3) {
+      return [...baseStages, 'Interview 3', 'Hired'];
+    }
+    
+    return [...baseStages, 'Hired'];
+  };
+
+  // Get dynamic values based on job configuration
+  const hiringSteps = getHiringSteps(job?.has_interview_3);
+  const stageMapping = getStageMapping(job?.has_interview_3);
+  const stages = getStages(job?.has_interview_3);
 
   const getCurrentStep = (status) => {
     return stageMapping[status] || 0;
   };
 
   const getNextStage = (currentStage) => {
-    const stages = ['NEW', 'Evaluated', 'Phone Screen', 'Technical Interview', 'Final Interview', 'Hired'];
     const currentIndex = stages.indexOf(currentStage);
     if (currentIndex < stages.length - 1) {
       return stages[currentIndex + 1];
@@ -276,7 +320,7 @@ const CandidateProfile = () => {
   const handleCallCompleted = (moveToNext) => {
     setPhoneDialogOpen(false);
     if (moveToNext) {
-      updateCandidateStage('Technical Interview');
+      updateCandidateStage('Interview 1');
     }
   };
 

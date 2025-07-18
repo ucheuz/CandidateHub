@@ -57,7 +57,9 @@ const JobForm = () => {
     // New fields for AI evaluation customization
     job_template: '',
     job_specification: '',
-    evaluation_criteria: ''
+    evaluation_criteria: '',
+    // Interview pipeline configuration
+    has_interview_3: false
   });
 
   const jobTypes = [
@@ -611,6 +613,44 @@ const JobForm = () => {
                     )}
                   </CardContent>
                 </Card>
+
+                {/* Interview Pipeline Configuration Card */}
+                <Card elevation={2} sx={{ borderRadius: 2 }}>
+                  <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                      <AssessmentIcon sx={{ mr: 1, color: '#0C3F05' }} />
+                      <Typography variant="h6" sx={{ fontWeight: 600, color: '#0C3F05' }}>
+                        Interview Pipeline Configuration
+                      </Typography>
+                    </Box>
+                    <Divider sx={{ mb: 2 }} />
+                    
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                      Configure the interview process for this job role
+                    </Typography>
+                    
+                    <FormControl fullWidth sx={{ mb: 2 }}>
+                      <InputLabel>Include Interview 3?</InputLabel>
+                      <Select
+                        value={formData.has_interview_3}
+                        onChange={(e) => setFormData({...formData, has_interview_3: e.target.value})}
+                        label="Include Interview 3?"
+                      >
+                        <MenuItem value={false}>No - Standard Pipeline (Interview 1, Interview 2)</MenuItem>
+                        <MenuItem value={true}>Yes - Extended Pipeline (Interview 1, Interview 2, Interview 3)</MenuItem>
+                      </Select>
+                    </FormControl>
+                    
+                    <Alert severity="info" sx={{ mt: 2 }}>
+                      <Typography variant="body2">
+                        {formData.has_interview_3 
+                          ? "This job will include a third interview stage in the hiring pipeline."
+                          : "This job will use the standard two-interview pipeline."
+                        }
+                      </Typography>
+                    </Alert>
+                  </CardContent>
+                </Card>
               </Stack>
             </Grid>
 
@@ -687,6 +727,15 @@ const JobForm = () => {
                         {formData.job_template && formData.job_specification && formData.evaluation_criteria 
                           ? 'Configured' 
                           : 'Not configured'}
+                      </Typography>
+                    </Box>
+
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Interview Pipeline
+                      </Typography>
+                      <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                        {formData.has_interview_3 ? 'Extended Pipeline (3 interviews)' : 'Standard Pipeline (2 interviews)'}
                       </Typography>
                     </Box>
 
