@@ -1,36 +1,50 @@
 import React, { useState } from 'react';
-import { Container, Paper, TextField, Button, Typography, Box } from '@mui/material';
-import axios from 'axios';
+import { Container, Paper, TextField, Button, Typography, Box, Chip, Stack } from '@mui/material';
+import { useNavigate } from 'react-router-dom';
+import { collection, addDoc } from 'firebase/firestore';
+import { db } from '../firebase';
 
 const JobForm = () => {
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     required_skills: '',
     location: '',
-    type: ''
+    type: '',
+    listedBy: 'Current User', // This should be replaced with actual user info when auth is implemented
+    hiringManagers: '',
+    datePosted: null,
+    dateHired: null
   });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Submitting form data:', formData);
     try {
-      const response = await axios.post('http://localhost:5000/api/job', formData);
-      if (response.status === 201) {
-        alert('Job created successfully!');
-        // Reset form
-        setFormData({
-          title: '',
-          description: '',
-          required_skills: '',
-          location: '',
-          type: ''
-        });
-      }
+      const jobsCollection = collection(db, 'jobs');
+      const serverDate = new Date();
+      
+      const jobData = {
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        required_skills: formData.required_skills.split(',').map(skill => skill.trim()).filter(Boolean),
+        location: formData.location.trim(),
+        type: formData.type.trim(),
+        listedBy: formData.listedBy.trim(),
+        hiringManagers: formData.hiringManagers.split(',').map(manager => manager.trim()).filter(Boolean),
+        datePosted: serverDate,
+        dateHired: null
+      };
+
+      console.log('Creating new job:', jobData);
+      const docRef = await addDoc(jobsCollection, jobData);
+      console.log('Job created with ID:', docRef.id);
+      
+      alert('Job created successfully!');
+      navigate('/');
     } catch (error) {
       console.error('Error creating job:', error);
-      const errorMessage = error.response?.data?.error || error.message;
-      alert(`Error creating job: ${errorMessage}`);
+      alert(`Error creating job: ${error.message}`);
     }
   };
 
@@ -78,6 +92,7 @@ const JobForm = () => {
               onChange={handleChange}
               margin="normal"
               required
+              helperText="Enter skills separated by commas"
             />
             <TextField
               fullWidth
@@ -94,6 +109,16 @@ const JobForm = () => {
               value={formData.type}
               onChange={handleChange}
               margin="normal"
+            />
+            <TextField
+              fullWidth
+              label="Hiring Managers (comma separated)"
+              name="hiringManagers"
+              value={formData.hiringManagers}
+              onChange={handleChange}
+              margin="normal"
+              required
+              helperText="Enter manager names separated by commas"
             />
             <Box mt={2}>
               <Button type="submit" variant="contained" color="primary">

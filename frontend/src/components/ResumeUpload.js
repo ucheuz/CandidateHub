@@ -6,12 +6,31 @@ import axios from 'axios';
 const ResumeUpload = () => {
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState('');
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const jobId = searchParams.get('jobId');
 
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);
+  };
+
+  const waitForEvaluation = async (jobId, resumeId, maxAttempts = 10) => {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        const response = await axios.get(`http://localhost:5000/api/evaluate/${jobId}/${resumeId}`);
+        if (response.status === 200) {
+          return true; // Evaluation is ready
+        }
+      } catch (error) {
+        if (error.response?.status !== 404) {
+          throw error; // If it's not a 404, something else is wrong
+        }
+      }
+      // Wait 5 seconds before trying again
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+    return false; // Evaluation not ready after all attempts
   };
 
   const handleSubmit = async (e) => {
@@ -54,9 +73,17 @@ const ResumeUpload = () => {
       });
 
       if (response.status === 201) {
-        const resumeId = response.data.id;
-        console.log('Upload successful. Resume ID:', resumeId);
-        navigate(`/evaluation/${jobId}/${resumeId}`);
+        const { id: resumeId, status, evaluation_id } = response.data;
+        console.log('Upload response:', response.data);
+        
+        if (status === 'Evaluated' && evaluation_id) {
+          setUploadStatus('Evaluation complete! Redirecting...');
+          navigate(`/evaluation/${jobId}/${resumeId}`);
+        } else {
+          const errorMessage = response.data.error || 'Unknown error during evaluation';
+          setUploadStatus(`Error during evaluation: ${errorMessage}`);
+          alert(`The evaluation process failed: ${errorMessage}. Please try uploading the resume again.`);
+        }
       }
     } catch (error) {
       console.error('Error uploading resume:', error);
@@ -81,7 +108,14 @@ const ResumeUpload = () => {
               onChange={handleFileChange}
               style={{ marginBottom: '20px' }}
             />
-            {loading && <LinearProgress sx={{ my: 2 }} />}
+            {loading && (
+              <>
+                <LinearProgress sx={{ my: 2 }} />
+                <Typography variant="body2" color="textSecondary" align="center" sx={{ my: 1 }}>
+                  {uploadStatus || 'Uploading resume...'}
+                </Typography>
+              </>
+            )}
             <Button
               type="submit"
               variant="contained"

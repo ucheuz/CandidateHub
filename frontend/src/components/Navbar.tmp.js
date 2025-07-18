@@ -7,18 +7,16 @@ import {
   Box,
   IconButton,
   Menu,
-  MenuItem,
-  Tooltip
+  MenuItem
 } from '@mui/material';
 import { Link, useLocation } from 'react-router-dom';
 import MenuIcon from '@mui/icons-material/Menu';
-import { sections } from './CandidateProfile';
 
-const Navbar = ({ onSectionChange, activeSection, candidateId }) => {
+const Navbar = ({ onSectionSelect }) => {
   const [menuAnchor, setMenuAnchor] = useState(null);
   const location = useLocation();
   
-  const isCandidateProfile = Boolean(candidateId);
+  const isCandidateProfile = location.pathname.includes('/candidate/');
 
   const handleMenuClick = (event) => {
     setMenuAnchor(event.currentTarget);
@@ -29,10 +27,16 @@ const Navbar = ({ onSectionChange, activeSection, candidateId }) => {
   };
 
   const handleSectionSelect = (section) => {
-    if (onSectionChange) {
-      onSectionChange(section);
-    }
+    onSectionSelect(section);
     handleMenuClose();
+  };
+
+  const sections = {
+    CV: 'cv',
+    OVERALL_FEEDBACK: 'overall-feedback',
+    SCORECARD: 'scorecard',
+    COLLABORATIVE_NOTES: 'collaborative-notes',
+    HIRING_PIPELINE: 'hiring-pipeline'
   };
 
   return (
@@ -71,84 +75,74 @@ const Navbar = ({ onSectionChange, activeSection, candidateId }) => {
             Candidate Hub
           </Typography>
           <Box sx={{ display: 'flex', gap: 1 }}>
-            <Button 
-              color="inherit" 
-              component={Link} 
-              to="/"
-              sx={{ fontFamily: 'Helvetica, Arial, sans-serif' }}
-            >
+            <Button color="inherit" component={Link} to="/">
               Jobs
             </Button>
-            <Button 
-              color="inherit" 
-              component={Link} 
-              to="/jobs/new"
-              sx={{ fontFamily: 'Helvetica, Arial, sans-serif' }}
-            >
+            <Button color="inherit" component={Link} to="/jobs/new">
               Add Job
             </Button>
-            <Button 
-              color="inherit" 
-              component={Link} 
-              to="/resume/upload"
-              sx={{ fontFamily: 'Helvetica, Arial, sans-serif' }}
-            >
+            <Button color="inherit" component={Link} to="/resume/upload">
               Upload Resume
+            </Button>
+            <Button color="inherit" component={Link} to="/models">
+              AI Models
             </Button>
           </Box>
         </Box>
         
         {isCandidateProfile && (
           <>
-            <Tooltip title="View Sections">
-              <IconButton
-                color="inherit"
-                onClick={handleMenuClick}
-                size="large"
-                edge="end"
-                sx={{ ml: 2 }}
-              >
-                <MenuIcon />
-              </IconButton>
-            </Tooltip>
+            <IconButton
+              sx={{
+                p: 0,
+                ml: 2,
+                '&:hover': {
+                  backgroundColor: 'transparent'
+                }
+              }}
+              disableRipple
+              onClick={handleMenuClick}
+            >
+              <MenuIcon sx={{ fontSize: 28, color: 'white' }} />
+            </IconButton>
+
             <Menu
               anchorEl={menuAnchor}
               open={Boolean(menuAnchor)}
               onClose={handleMenuClose}
-              anchorOrigin={{
-                vertical: 'bottom',
-                horizontal: 'right',
-              }}
-              transformOrigin={{
-                vertical: 'top',
-                horizontal: 'right',
-              }}
               PaperProps={{
-                elevation: 3,
                 sx: {
                   mt: 1,
-                  minWidth: 200,
                   '& .MuiMenuItem-root': {
-                    px: 2,
+                    fontFamily: 'Helvetica',
+                    fontSize: '14px',
                     py: 1,
-                    borderRadius: 1,
-                    '&:hover': {
-                      backgroundColor: 'action.hover',
-                    },
-                  },
-                },
+                    px: 2,
+                    minWidth: '200px',
+                    '&.Mui-selected': {
+                      backgroundColor: '#f5f5f5',
+                      fontWeight: 'bold',
+                      color: '#0C3F05'
+                    }
+                  }
+                }
               }}
             >
-              {Object.entries(sections).map(([key, value]) => (
-                <MenuItem
-                  key={value}
-                  onClick={() => handleSectionSelect(value)}
-                >
-                  {key.split('_').map(word => 
-                    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-                  ).join(' ')}
-                </MenuItem>
-              ))}
+              <MenuItem onClick={() => handleSectionSelect(sections.CV)}>
+                CV
+              </MenuItem>
+              <MenuItem onClick={() => handleSectionSelect(sections.OVERALL_FEEDBACK)}>
+                Overall Feedback
+              </MenuItem>
+              <MenuItem onClick={() => handleSectionSelect(sections.SCORECARD)}>
+                Scorecard
+              </MenuItem>
+              <MenuItem onClick={() => handleSectionSelect(sections.COLLABORATIVE_NOTES)}>
+                Collaborative Notes
+              </MenuItem>
+              <MenuItem onClick={() => handleSectionSelect(sections.HIRING_PIPELINE)}>
+                Hiring Pipeline
+              </MenuItem>
             </Menu>
           </>
         )}
