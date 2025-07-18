@@ -6,6 +6,7 @@ import JobList from './components/JobList';
 import JobForm from './components/JobForm';
 import ResumeUpload from './components/ResumeUpload';
 import Evaluation from './components/Evaluation';
+import ModelList from './components/ModelList';
 
 const theme = createTheme({
   palette: {
@@ -28,6 +29,7 @@ function App() {
           <Route path="/jobs/new" element={<JobForm />} />
           <Route path="/resume/upload" element={<ResumeUpload />} />
           <Route path="/evaluation/:jobId/:resumeId" element={<Evaluation />} />
+          <Route path="/models" element={<ModelList />} />
         </Routes>
       </Router>
     </ThemeProvider>
