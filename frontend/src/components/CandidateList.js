@@ -80,6 +80,14 @@ const StyledDataGrid = styled(DataGrid)({
   '& .status-rejected': {
     // Background color removed
   },
+  '& .rejected-row': {
+    textDecoration: 'line-through',
+    opacity: 0.6,
+    backgroundColor: '#f5f5f5',
+    '&:hover': {
+      backgroundColor: '#eeeeee',
+    },
+  },
   '& .source-column .MuiChip-label': {
     color: '#000000',
   },
@@ -105,6 +113,7 @@ const CandidateList = () => {
   const [error, setError] = useState(null);
   const [selectedJob, setSelectedJob] = useState(searchParams.get('jobId') || null);
   const [jobs, setJobs] = useState([]);
+  const [statusFilter, setStatusFilter] = useState('active'); // 'active', 'rejected', 'all'
 
   const columns = useMemo(() => [
     { 
@@ -242,24 +251,38 @@ const CandidateList = () => {
       }
     },
     { 
-      field: 'stage', 
+      field: 'status', 
       headerName: 'Stage', 
       width: 130,
       renderCell: (params) => {
-        const stage = params.value || 'Screening';
+        const status = params.value || 'NEW';
+        // Map status to display names
+        const statusDisplayMap = {
+          'NEW': 'New',
+          'Evaluated': 'Evaluated',
+          'Phone Screen': 'Screening',
+          'Technical Interview': 'Interview',
+          'Final Interview': 'Interview',
+          'Hired': 'Hired',
+          'Rejected': 'Rejected'
+        };
+        const displayName = statusDisplayMap[status] || status;
+        
         const stageColors = {
+          'New': '#e3f2fd',        // Light blue
+          'Evaluated': '#e3f2fd',  // Light blue
           'Screening': '#e3f2fd',  // Light blue
           'Interview': '#e8f5e9',  // Light green
-          'Offer': '#f3e5f5',     // Light purple
+          'Hired': '#f3e5f5',      // Light purple
           'Rejected': '#ffebee',   // Light red
         };
         return (
           <Chip
-            label={stage}
+            label={displayName}
             size="small"
-            className={`status-${stage.toLowerCase()}`}
+            className={`status-${displayName.toLowerCase()}`}
             sx={{
-              backgroundColor: stageColors[stage] || '#f5f5f5',
+              backgroundColor: stageColors[displayName] || '#f5f5f5',
               color: 'text.primary',
               '& .MuiChip-label': {
                 color: 'text.primary',
@@ -330,15 +353,45 @@ const CandidateList = () => {
     };
 
     fetchCandidates();
-  }, [selectedJob]);
+  }, [selectedJob, statusFilter]);
+
+  // Filter candidates based on status filter
+  const filteredCandidates = useMemo(() => {
+    let filtered = [];
+    
+    if (statusFilter === 'active') {
+      filtered = candidates.filter(c => c.status !== 'Rejected');
+    } else if (statusFilter === 'rejected') {
+      filtered = candidates.filter(c => c.status === 'Rejected');
+    } else {
+      // 'all' - show everything but with active candidates first
+      const activeCandidates = candidates.filter(c => c.status !== 'Rejected');
+      const rejectedCandidates = candidates.filter(c => c.status === 'Rejected');
+      
+      // Sort each group alphabetically by name
+      const sortByName = (a, b) => {
+        const nameA = (a.name || '').toLowerCase();
+        const nameB = (b.name || '').toLowerCase();
+        return nameA.localeCompare(nameB);
+      };
+      
+      activeCandidates.sort(sortByName);
+      rejectedCandidates.sort(sortByName);
+      
+      // Combine with active candidates first
+      filtered = [...activeCandidates, ...rejectedCandidates];
+    }
+    
+    return filtered;
+  }, [candidates, statusFilter]);
 
   // Calculate counts for each stage
   const stageCounts = {
-    NEW: candidates.filter(c => !c.stage || c.stage === 'NEW').length,
-    SCREENING: candidates.filter(c => c.stage === 'SCREENING').length,
-    'INTERVIEW 1': candidates.filter(c => c.stage === 'INTERVIEW 1').length,
-    'INTERVIEW 2': candidates.filter(c => c.stage === 'INTERVIEW 2').length,
-    OFFERED: candidates.filter(c => c.stage === 'OFFERED').length,
+    NEW: candidates.filter(c => !c.status || c.status === 'NEW' || c.status === 'Evaluated').length,
+    SCREENING: candidates.filter(c => c.status === 'Phone Screen').length,
+    'INTERVIEW 1': candidates.filter(c => c.status === 'Technical Interview').length,
+    'INTERVIEW 2': candidates.filter(c => c.status === 'Final Interview').length,
+    OFFERED: candidates.filter(c => c.status === 'Hired').length,
   };
 
   if (error) {
@@ -351,32 +404,46 @@ const CandidateList = () => {
 
   return (
     <Box sx={{ height: 'calc(100vh - 100px)', width: '100%', p: 3 }}>
-      <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <FormControl sx={{ minWidth: 200 }}>
-          <InputLabel>Filter by Job</InputLabel>
-          <Select
-            value={selectedJob || ''}
-            onChange={(e) => {
-              const newJobId = e.target.value;
-              setSelectedJob(newJobId);
-              if (newJobId) {
-                navigate(`/candidates?jobId=${newJobId}`);
-              } else {
-                navigate('/candidates');
-              }
-            }}
-            label="Filter by Job"
-          >
-            <MenuItem value="">
-              <em>All Jobs</em>
-            </MenuItem>
-            {jobs.map((job) => (
-              <MenuItem key={job.id} value={job.id}>
-                {job.title}
+      <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <FormControl sx={{ minWidth: 200 }}>
+            <InputLabel>Filter by Job</InputLabel>
+            <Select
+              value={selectedJob || ''}
+              onChange={(e) => {
+                const newJobId = e.target.value;
+                setSelectedJob(newJobId);
+                if (newJobId) {
+                  navigate(`/candidates?jobId=${newJobId}`);
+                } else {
+                  navigate('/candidates');
+                }
+              }}
+              label="Filter by Job"
+            >
+              <MenuItem value="">
+                <em>All Jobs</em>
               </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+              {jobs.map((job) => (
+                <MenuItem key={job.id} value={job.id}>
+                  {job.title}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl sx={{ minWidth: 150 }}>
+            <InputLabel>Status Filter</InputLabel>
+            <Select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              label="Status Filter"
+            >
+              <MenuItem value="active">Active Candidates</MenuItem>
+              <MenuItem value="rejected">Rejected Candidates</MenuItem>
+              <MenuItem value="all">All Candidates</MenuItem>
+            </Select>
+          </FormControl>
+        </Box>
         <Button
           variant="contained"
           startIcon={<AddIcon />}
@@ -421,13 +488,34 @@ const CandidateList = () => {
       </Box>
       
       <StyledDataGrid
-        rows={candidates}
+        rows={filteredCandidates}
         columns={columns}
         loading={loading}
         autoHeight
         density="comfortable"
         disableSelectionOnClick
-        getRowClassName={(params) => `status-${(params.row.stage || 'screening').toLowerCase()}`}
+        getRowClassName={(params) => {
+          const status = params.row.status || 'screening';
+          // Map status to CSS class names
+          const statusMap = {
+            'NEW': 'screening',
+            'Evaluated': 'screening',
+            'Phone Screen': 'screening',
+            'Technical Interview': 'interview',
+            'Final Interview': 'interview',
+            'Hired': 'offer',
+            'Rejected': 'rejected'
+          };
+          
+          let className = `status-${statusMap[status] || 'screening'}`;
+          
+          // Add rejected row styling
+          if (status === 'Rejected') {
+            className += ' rejected-row';
+          }
+          
+          return className;
+        }}
         components={{
           Toolbar: GridToolbar,
         }}

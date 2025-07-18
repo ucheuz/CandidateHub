@@ -25,6 +25,19 @@ import {
   ListItem,
   ListItemIcon,
   ListItemText,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  DialogContentText,
+  TextField,
+  Snackbar,
+  IconButton,
+  Tooltip,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
 } from '@mui/material';
 import { 
   Person as PersonIcon,
@@ -38,6 +51,11 @@ import {
   Work as WorkIcon,
   School as SchoolIcon,
   TrendingUp as TrendingUpIcon,
+  ArrowForward as ArrowForwardIcon,
+  Cancel as CancelIcon,
+  Call as CallIcon,
+  Close as CloseIcon,
+  CheckCircle as CheckCircleIcon,
 } from '@mui/icons-material';
 import { useParams } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -60,6 +78,14 @@ const CandidateProfile = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState(0);
+  const [phoneDialogOpen, setPhoneDialogOpen] = useState(false);
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [selectedRejectReason, setSelectedRejectReason] = useState('');
+  const [customRejectReason, setCustomRejectReason] = useState('');
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [updating, setUpdating] = useState(false);
 
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
@@ -102,6 +128,24 @@ const CandidateProfile = () => {
     return 'Poor Match';
   };
 
+  const rejectionReasons = [
+    'Did not fit company culture',
+    'Did not meet desired qualifications',
+    'Did not meet minimum qualifications',
+    'Did not meet screening requirements',
+    'Incomplete application',
+    'Ineligible to work in location',
+    'Misrepresented qualifications',
+    'More qualified candidate selected',
+    'No show for interview',
+    'Unresponsive',
+    'High Remuneration Expectations',
+    'Overqualified',
+    'Background Checks',
+    'Unsuccessful Skills Assessment',
+    'Other'
+  ];
+
   const hiringSteps = [
     'Application',
     'Initial Review',
@@ -111,16 +155,116 @@ const CandidateProfile = () => {
     'Decision'
   ];
 
+  const stageMapping = {
+    'NEW': 0,
+    'Evaluated': 1,
+    'Phone Screen': 2,
+    'Technical Interview': 3,
+    'Final Interview': 4,
+    'Hired': 5,
+    'Rejected': -1
+  };
+
   const getCurrentStep = (status) => {
-    switch (status) {
-      case 'Evaluated': return 1;
-      case 'Phone Screen': return 2;
-      case 'Technical Interview': return 3;
-      case 'Final Interview': return 4;
-      case 'Hired': return 5;
-      case 'Rejected': return -1;
-      default: return 0;
+    return stageMapping[status] || 0;
+  };
+
+  const getNextStage = (currentStage) => {
+    const stages = ['NEW', 'Evaluated', 'Phone Screen', 'Technical Interview', 'Final Interview', 'Hired'];
+    const currentIndex = stages.indexOf(currentStage);
+    if (currentIndex < stages.length - 1) {
+      return stages[currentIndex + 1];
     }
+    return currentStage;
+  };
+
+  const updateCandidateStage = async (newStage, rejectionReason = null) => {
+    setUpdating(true);
+    try {
+      const response = await fetch(`http://localhost:5000/api/candidates/${candidateId}/stage`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          stage: newStage,
+          rejectionReason: rejectionReason
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update candidate stage');
+      }
+
+      const updatedCandidate = await response.json();
+      setCandidate(prev => ({ ...prev, status: newStage }));
+      setSnackbarMessage(
+        newStage === 'Rejected' 
+          ? 'Candidate has been rejected' 
+          : `Candidate moved to ${newStage} stage`
+      );
+      setSnackbarOpen(true);
+    } catch (err) {
+      console.error('Error updating candidate stage:', err);
+      setError(err.message);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleMoveToNext = () => {
+    const nextStage = getNextStage(candidate.status);
+    updateCandidateStage(nextStage);
+  };
+
+  const handleReject = () => {
+    setRejectDialogOpen(true);
+  };
+
+  const handleRejectConfirm = () => {
+    const finalRejectReason = selectedRejectReason === 'Other' ? customRejectReason : selectedRejectReason;
+    updateCandidateStage('Rejected', finalRejectReason);
+    setRejectDialogOpen(false);
+    setSelectedRejectReason('');
+    setCustomRejectReason('');
+    setRejectReason('');
+  };
+
+  const handleRejectCancel = () => {
+    setRejectDialogOpen(false);
+    setSelectedRejectReason('');
+    setCustomRejectReason('');
+    setRejectReason('');
+  };
+
+  const handleRejectReasonChange = (event) => {
+    setSelectedRejectReason(event.target.value);
+    if (event.target.value !== 'Other') {
+      setCustomRejectReason('');
+    }
+  };
+
+  const isRejectFormValid = () => {
+    if (!selectedRejectReason) return false;
+    if (selectedRejectReason === 'Other' && !customRejectReason.trim()) return false;
+    return true;
+  };
+
+  const handlePhoneCall = () => {
+    setPhoneDialogOpen(true);
+  };
+
+  const handleCallCompleted = (moveToNext) => {
+    setPhoneDialogOpen(false);
+    if (moveToNext) {
+      updateCandidateStage('Technical Interview');
+    }
+  };
+
+  const handleCallNotCompleted = () => {
+    setPhoneDialogOpen(false);
+    setSnackbarMessage('Call not completed. Candidate remains in current stage.');
+    setSnackbarOpen(true);
   };
 
   const TabPanel = ({ children, value, index, ...other }) => {
@@ -283,6 +427,13 @@ const CandidateProfile = () => {
         <Alert severity="error" sx={{ mb: 3 }}>
           There was an error processing this candidate's profile. 
           {candidate.error && `: ${candidate.error}`}
+        </Alert>
+      )}
+
+      {candidate.status === 'Rejected' && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          This candidate has been rejected from the hiring process.
+          {candidate.rejectionReason && ` Reason: ${candidate.rejectionReason}`}
         </Alert>
       )}
 
@@ -467,60 +618,140 @@ const CandidateProfile = () => {
               <Typography variant="h6" sx={{ color: '#343a40' }}>Hiring Pipeline Progress</Typography>
             </Box>
             
-            <Stepper 
-              activeStep={getCurrentStep(candidate.status)} 
-              alternativeLabel
-              sx={{ mb: 4 }}
-            >
-              {hiringSteps.map((label, index) => (
-                <Step key={label}>
-                  <StepLabel
-                    sx={{
-                      '& .MuiStepLabel-label': {
-                        fontFamily: 'Helvetica, Arial, sans-serif',
-                      }
-                    }}
-                  >
-                    {label}
-                  </StepLabel>
-                </Step>
-              ))}
-            </Stepper>
+            {candidate.status === 'Rejected' ? (
+              <Alert severity="error" sx={{ mb: 3 }}>
+                <Typography variant="h6" gutterBottom>
+                  Candidate Rejected
+                </Typography>
+                <Typography variant="body2">
+                  This candidate has been removed from the hiring pipeline.
+                  {candidate.rejectionReason && ` Reason: ${candidate.rejectionReason}`}
+                </Typography>
+              </Alert>
+            ) : (
+              <>
+                <Stepper 
+                  activeStep={getCurrentStep(candidate.status)} 
+                  alternativeLabel
+                  sx={{ mb: 4 }}
+                >
+                  {hiringSteps.map((label, index) => (
+                    <Step key={label}>
+                      <StepLabel
+                        sx={{
+                          '& .MuiStepLabel-label': {
+                            fontFamily: 'Helvetica, Arial, sans-serif',
+                          }
+                        }}
+                      >
+                        {label}
+                      </StepLabel>
+                    </Step>
+                  ))}
+                </Stepper>
+
+                <Grid container spacing={3}>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="h6" gutterBottom sx={{ color: '#343a40' }}>
+                      Current Stage Actions
+                    </Typography>
+                    <Stack spacing={2}>
+                      {candidate.status === 'Phone Screen' ? (
+                        <Button 
+                          variant="contained" 
+                          sx={{ 
+                            bgcolor: '#0C3F05',
+                            '&:hover': { bgcolor: '#0a3604' }
+                          }}
+                          startIcon={<CallIcon />}
+                          onClick={handlePhoneCall}
+                          disabled={updating}
+                        >
+                          Call Candidate
+                        </Button>
+                      ) : (
+                        <Button 
+                          variant="contained" 
+                          sx={{ 
+                            bgcolor: '#0C3F05',
+                            '&:hover': { bgcolor: '#0a3604' }
+                          }}
+                          startIcon={<WorkIcon />}
+                          disabled={updating}
+                        >
+                          Schedule Interview
+                        </Button>
+                      )}
+                      
+                      <Button 
+                        variant="outlined" 
+                        sx={{ 
+                          borderColor: '#6c757d', 
+                          color: '#495057',
+                          '&:hover': { 
+                            borderColor: '#0C3F05', 
+                            color: '#0C3F05',
+                            bgcolor: '#f8f9fa'
+                          }
+                        }}
+                        startIcon={<EmailIcon />}
+                        disabled={updating}
+                      >
+                        Send Email
+                      </Button>
+                    </Stack>
+                  </Grid>
+                  
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="h6" gutterBottom sx={{ color: '#343a40' }}>
+                      Pipeline Actions
+                    </Typography>
+                    <Stack spacing={2}>
+                      {candidate.status !== 'Hired' && candidate.status !== 'Rejected' && (
+                        <Button 
+                          variant="contained"
+                          color="primary"
+                          startIcon={<ArrowForwardIcon />}
+                          onClick={handleMoveToNext}
+                          disabled={updating}
+                          sx={{ 
+                            bgcolor: '#007bff',
+                            '&:hover': { bgcolor: '#0056b3' }
+                          }}
+                        >
+                          Move to Next Stage
+                        </Button>
+                      )}
+                      
+                      {candidate.status !== 'Rejected' && candidate.status !== 'Hired' && (
+                        <Button 
+                          variant="outlined"
+                          color="error"
+                          startIcon={<CancelIcon />}
+                          onClick={handleReject}
+                          disabled={updating}
+                          sx={{ 
+                            borderColor: '#dc3545', 
+                            color: '#dc3545',
+                            '&:hover': { 
+                              borderColor: '#c82333', 
+                              color: '#c82333',
+                              bgcolor: '#f8f9fa'
+                            }
+                          }}
+                        >
+                          Reject Candidate
+                        </Button>
+                      )}
+                    </Stack>
+                  </Grid>
+                </Grid>
+              </>
+            )}
+
+            <Divider sx={{ my: 3 }} />
 
             <Grid container spacing={3}>
-              <Grid item xs={12} md={6}>
-                <Typography variant="h6" gutterBottom sx={{ color: '#343a40' }}>
-                  Current Stage Actions
-                </Typography>
-                <Stack spacing={2}>
-                  <Button 
-                    variant="contained" 
-                    sx={{ 
-                      bgcolor: '#0C3F05',
-                      '&:hover': { bgcolor: '#0a3604' }
-                    }}
-                    startIcon={<WorkIcon />}
-                  >
-                    Schedule Interview
-                  </Button>
-                  <Button 
-                    variant="outlined" 
-                    sx={{ 
-                      borderColor: '#6c757d', 
-                      color: '#495057',
-                      '&:hover': { 
-                        borderColor: '#0C3F05', 
-                        color: '#0C3F05',
-                        bgcolor: '#f8f9fa'
-                      }
-                    }}
-                    startIcon={<EmailIcon />}
-                  >
-                    Send Email
-                  </Button>
-                </Stack>
-              </Grid>
-              
               <Grid item xs={12} md={6}>
                 <Typography variant="h6" gutterBottom sx={{ color: '#343a40' }}>
                   Stage History
@@ -546,12 +777,177 @@ const CandidateProfile = () => {
                       />
                     </ListItem>
                   )}
+                  {candidate.status === 'Rejected' && (
+                    <ListItem>
+                      <ListItemIcon>
+                        <CancelIcon color="error" />
+                      </ListItemIcon>
+                      <ListItemText
+                        primary="Candidate Rejected"
+                        secondary="Application was not successful"
+                      />
+                    </ListItem>
+                  )}
+                  {candidate.status === 'Hired' && (
+                    <ListItem>
+                      <ListItemIcon>
+                        <CheckCircleIcon color="success" />
+                      </ListItemIcon>
+                      <ListItemText
+                        primary="Candidate Hired"
+                        secondary="Successfully completed hiring process"
+                      />
+                    </ListItem>
+                  )}
                 </List>
               </Grid>
             </Grid>
           </CardContent>
         </Card>
       </TabPanel>
+
+      {/* Phone Call Dialog */}
+      <Dialog open={phoneDialogOpen} onClose={() => setPhoneDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          <Box display="flex" alignItems="center" justifyContent="space-between">
+            <Typography variant="h6">Call Candidate</Typography>
+            <IconButton onClick={() => setPhoneDialogOpen(false)}>
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Box textAlign="center" mb={3}>
+            <Typography variant="h6" gutterBottom>
+              {candidate.name}
+            </Typography>
+            <Typography variant="h4" sx={{ color: '#333', fontWeight: 'bold' }}>
+              {candidate.phone || 'No phone number available'}
+            </Typography>
+          </Box>
+          <DialogContentText>
+            Have you completed the phone screen call with this candidate?
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={handleCallNotCompleted}
+            color="secondary"
+            variant="outlined"
+            sx={{
+              color: '#666',
+              borderColor: '#666',
+              '&:hover': { borderColor: '#333', color: '#333' }
+            }}
+          >
+            No, I haven't called yet
+          </Button>
+          <Button 
+            onClick={() => handleCallCompleted(false)}
+            variant="outlined"
+            sx={{
+              color: '#1976d2',
+              borderColor: '#1976d2',
+              '&:hover': { 
+                borderColor: '#1565c0', 
+                color: '#1565c0',
+                backgroundColor: '#f5f5f5'
+              }
+            }}
+          >
+            Yes, but keep in current stage
+          </Button>
+          <Button 
+            onClick={() => handleCallCompleted(true)}
+            variant="contained"
+            sx={{ 
+              bgcolor: '#1976d2',
+              color: 'white',
+              '&:hover': { bgcolor: '#1565c0' }
+            }}
+          >
+            Yes, move to next stage
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Rejection Dialog */}
+      <Dialog open={rejectDialogOpen} onClose={handleRejectCancel} maxWidth="sm" fullWidth>
+        <DialogTitle>Reject Candidate</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to reject {candidate.name}? Please select a reason for rejection.
+          </DialogContentText>
+          <Box sx={{ mt: 2 }}>
+            <FormControl fullWidth margin="dense">
+              <InputLabel>Rejection Reason</InputLabel>
+              <Select
+                value={selectedRejectReason}
+                onChange={handleRejectReasonChange}
+                label="Rejection Reason"
+              >
+                {rejectionReasons.map((reason) => (
+                  <MenuItem key={reason} value={reason}>
+                    {reason}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            
+            {selectedRejectReason === 'Other' && (
+              <TextField
+                autoFocus
+                margin="dense"
+                label="Please specify the reason"
+                fullWidth
+                multiline
+                rows={3}
+                variant="outlined"
+                value={customRejectReason}
+                onChange={(e) => setCustomRejectReason(e.target.value)}
+                placeholder="Enter the specific reason for rejection..."
+                sx={{ mt: 2 }}
+              />
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={handleRejectCancel} 
+            color="primary"
+            variant="text"
+            sx={{ color: '#0C3F05' }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleRejectConfirm} 
+            color="error"
+            variant="contained"
+            disabled={!isRejectFormValid()}
+          >
+            Reject Candidate
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={6000}
+        onClose={() => setSnackbarOpen(false)}
+        message={snackbarMessage}
+        action={
+          <IconButton
+            size="small"
+            aria-label="close"
+            color="inherit"
+            onClick={() => setSnackbarOpen(false)}
+          >
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        }
+      />
     </Container>
   );
 };

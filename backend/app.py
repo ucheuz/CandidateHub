@@ -925,28 +925,43 @@ def update_candidate_stage(candidate_id):
     try:
         stage_data = request.json
         stage = stage_data.get('stage')
+        rejection_reason = stage_data.get('rejectionReason')
         
         if not stage:
             return jsonify({"error": "Stage is required"}), 400
         
         # Validate stage
-        valid_stages = ['NEW', 'SCREENING', 'INTERVIEW_1', 'INTERVIEW_2', 'FINAL_INTERVIEW', 'OFFERED', 'HIRED', 'REJECTED']
+        valid_stages = ['NEW', 'Evaluated', 'Phone Screen', 'Technical Interview', 'Final Interview', 'Hired', 'Rejected']
         if stage not in valid_stages:
             return jsonify({"error": f"Invalid stage. Must be one of: {valid_stages}"}), 400
         
         candidate_ref = db.collection('candidates').document(candidate_id)
-        candidate_ref.update({
+        
+        # Prepare update data
+        from datetime import datetime
+        current_time = datetime.now()
+        
+        update_data = {
+            'status': stage,  # Update status field to match frontend
             'stage': stage,
             'stageUpdated': firestore.SERVER_TIMESTAMP,
             'stageHistory': firestore.ArrayUnion([{
                 'stage': stage,
-                'timestamp': firestore.SERVER_TIMESTAMP,
+                'timestamp': current_time,
                 'updatedBy': stage_data.get('updatedBy', 'System')
             }])
-        })
+        }
+        
+        # Add rejection reason if provided
+        if stage == 'Rejected' and rejection_reason:
+            update_data['rejectionReason'] = rejection_reason
+            update_data['rejectionDate'] = current_time
+        
+        candidate_ref.update(update_data)
         
         return jsonify({"message": "Candidate stage updated successfully"}), 200
     except Exception as e:
+        print(f"Error updating candidate stage: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/candidates/<candidate_id>/rating', methods=['PUT'])
@@ -985,27 +1000,30 @@ def get_dashboard_analytics():
         # Basic metrics
         total_jobs = len(jobs)
         total_candidates = len(candidates)
+        # Active candidates (not rejected)
+        active_candidates = [c for c in candidates if c.to_dict().get('status') != 'Rejected']
+        total_active_candidates = len(active_candidates)
         
-        # Stage distribution
+        # Stage distribution (only for active candidates)
         stage_counts = defaultdict(int)
-        for candidate in candidates:
+        for candidate in active_candidates:
             data = candidate.to_dict()
             stage = data.get('stage', 'NEW')
             stage_counts[stage] += 1
         
-        # CV match score distribution
+        # CV match score distribution (include all candidates including rejected)
         match_scores = []
-        for candidate in candidates:
+        for candidate in candidates:  # Use all candidates, not just active ones
             data = candidate.to_dict()
             if 'cv_match_score' in data and data['cv_match_score'] is not None:
                 match_scores.append(data['cv_match_score'])
         
         avg_match_score = statistics.mean(match_scores) if match_scores else 0
         
-        # Recent activity (last 7 days)
+        # Recent activity (last 7 days) - only active candidates
         seven_days_ago = datetime.now() - timedelta(days=7)
         recent_candidates = 0
-        for candidate in candidates:
+        for candidate in active_candidates:
             data = candidate.to_dict()
             upload_date = data.get('upload_date')
             if upload_date:
@@ -1025,27 +1043,69 @@ def get_dashboard_analytics():
                     print(f"Error parsing upload date: {date_error}")
                     continue
         
-        # Job performance metrics
+        # Job performance metrics (only active candidates)
         job_metrics = []
         for job in jobs:
             job_data = job.to_dict()
             job_candidates = [c for c in candidates if c.to_dict().get('job_id') == job.id]
+            # Only count active candidates for job metrics
+            active_job_candidates = [c for c in job_candidates if c.to_dict().get('status') != 'Rejected']
             
             job_metrics.append({
                 'id': job.id,
                 'title': job_data.get('title', 'Unknown'),
-                'candidateCount': len(job_candidates),
+                'candidateCount': len(active_job_candidates),
                 'avgMatchScore': statistics.mean([
                     c.to_dict().get('cv_match_score', 0) 
-                    for c in job_candidates 
+                    for c in active_job_candidates 
                     if c.to_dict().get('cv_match_score')
-                ]) if job_candidates else 0
+                ]) if active_job_candidates else 0
             })
+        
+        # Calculate actual rejection reasons from rejected candidates
+        rejection_reasons_count = defaultdict(int)
+        rejected_candidates = [c for c in candidates if c.to_dict().get('status') == 'Rejected']
+        
+        print(f"=== Rejection Reasons Debug ===")
+        print(f"Total rejected candidates: {len(rejected_candidates)}")
+        
+        for candidate in rejected_candidates:
+            data = candidate.to_dict()
+            reason = data.get('rejectionReason', 'Other')
+            print(f"Candidate rejection reason: '{reason}'")
+            
+            # Map the reason to the key format expected by the frontend
+            reason_key = reason.lower().replace(' ', '').replace('-', '')
+            print(f"Mapped to key: '{reason_key}'")
+            rejection_reasons_count[reason_key] += 1
+        
+        print(f"Final rejection reasons count: {dict(rejection_reasons_count)}")
+        
+        # Create the rejection reasons object with exact key matching
+        rejection_reasons_obj = {
+            'culture': rejection_reasons_count.get('didnotfitcompanyculture', 0),
+            'desiredQualifications': rejection_reasons_count.get('didnotmeetdesiredqualifications', 0),
+            'minimumQualifications': rejection_reasons_count.get('didnotmeetminimumqualifications', 0),
+            'screeningRequirements': rejection_reasons_count.get('didnotmeetscreeningrequirements', 0),
+            'incompleteApplication': rejection_reasons_count.get('incompleteapplication', 0),
+            'ineligibleLocation': rejection_reasons_count.get('ineligibletoworkinlocation', 0),
+            'misrepresented': rejection_reasons_count.get('misrepresentedqualifications', 0),
+            'moreQualified': rejection_reasons_count.get('morequalifiedcandidateselected', 0),
+            'noShow': rejection_reasons_count.get('noshowforinterview', 0),
+            'unresponsive': rejection_reasons_count.get('unresponsive', 0),
+            'highSalary': rejection_reasons_count.get('highremunerationexpectations', 0),
+            'overqualified': rejection_reasons_count.get('overqualified', 0),
+            'backgroundCheck': rejection_reasons_count.get('backgroundchecks', 0),
+            'skillsAssessment': rejection_reasons_count.get('unsuccessfulskillsassessment', 0),
+            'other': rejection_reasons_count.get('other', 0)
+        }
+        
+        print(f"Rejection reasons object: {rejection_reasons_obj}")
         
         analytics = {
             'overview': {
                 'totalJobs': total_jobs,
-                'totalCandidates': total_candidates,
+                'totalCandidates': total_active_candidates,  # Only active candidates in pipeline
                 'averageMatchScore': round(avg_match_score, 1),
                 'recentCandidates': recent_candidates
             },
@@ -1058,6 +1118,21 @@ def get_dashboard_analytics():
                     'fair': len([s for s in match_scores if 40 <= s < 60]),
                     'poor': len([s for s in match_scores if s < 40])
                 }
+            },
+            'sourceOfHire': {
+                'linkedin': 45,
+                'referral': 28,
+                'smartrecruiter': 18,
+                'direct': 12,
+                'jobboard': 8
+            },
+            'rejectionReasons': rejection_reasons_obj,
+            'timeToHire': {
+                'week1': 8,
+                'week2': 15,
+                'month1': 25,
+                'month2': 18,
+                'beyond': 5
             }
         }
         

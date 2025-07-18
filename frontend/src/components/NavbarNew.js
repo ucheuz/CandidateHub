@@ -89,15 +89,6 @@ const Navbar = () => {
             >
               CandidateHub
             </Typography>
-            <Typography 
-              variant="caption" 
-              sx={{ 
-                color: 'rgba(255,255,255,0.8)',
-                fontFamily: 'Helvetica, Arial, sans-serif'
-              }}
-            >
-              Intelligent HR Platform
-            </Typography>
           </Box>
         </Box>
         
