@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Box,
   Rating,
@@ -30,9 +30,7 @@ const formatFirestoreTimestamp = (timestamp) => {
     return new Intl.DateTimeFormat('en-US', {
       year: 'numeric',
       month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
+      day: 'numeric'
     }).format(date);
   } catch (error) {
     console.error('Error formatting timestamp:', error);
@@ -43,7 +41,23 @@ const formatFirestoreTimestamp = (timestamp) => {
 const formatName = (name) => {
   if (!name) return '';
   return name.toLowerCase().split(' ')
-    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .map(part => {
+      // Handle hyphenated names
+      if (part.includes('-')) {
+        return part.split('-')
+          .map(namePart => namePart.charAt(0).toUpperCase() + namePart.slice(1))
+          .join('-');
+      }
+      // Handle Mc and Mac prefixes
+      if (part.startsWith('mc') && part.length > 2) {
+        return 'Mc' + part.charAt(2).toUpperCase() + part.slice(3);
+      }
+      if (part.startsWith('mac') && part.length > 3) {
+        return 'Mac' + part.charAt(3).toUpperCase() + part.slice(4);
+      }
+      // Regular capitalization
+      return part.charAt(0).toUpperCase() + part.slice(1);
+    })
     .join(' ');
 };
 
@@ -66,6 +80,12 @@ const StyledDataGrid = styled(DataGrid)({
   '& .status-rejected': {
     // Background color removed
   },
+  '& .source-column .MuiChip-label': {
+    color: '#000000',
+  },
+  '& .feedback-column .MuiChip-label': {
+    color: '#000000',
+  },
   '& .feedback-positive': {
     color: '#2e7d32',
   },
@@ -79,10 +99,11 @@ const StyledDataGrid = styled(DataGrid)({
 
 const CandidateList = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [candidates, setCandidates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [selectedJob, setSelectedJob] = useState(null);
+  const [selectedJob, setSelectedJob] = useState(searchParams.get('jobId') || null);
   const [jobs, setJobs] = useState([]);
 
   const columns = useMemo(() => [
@@ -91,14 +112,18 @@ const CandidateList = () => {
       headerName: 'Name', 
       flex: 1,
       valueFormatter: (params) => formatName(params.value),
-      renderCell: (params) => (
-        <Button
-          color="primary"
-          onClick={() => navigate(`/candidates/${params.row.id}`)}
-        >
-          {formatName(params.value)}
-        </Button>
-      )
+      renderCell: (params) => {
+        const formattedName = formatName(params.value);
+        return (
+          <Button
+            color="primary"
+            onClick={() => navigate(`/candidates/${params.row.id}`)}
+            sx={{ textTransform: 'none' }}  // This prevents button styling from affecting the case
+          >
+            {formattedName}
+          </Button>
+        );
+      }
     },
     { 
       field: 'uploadDate', 
@@ -118,9 +143,9 @@ const CandidateList = () => {
       }
     },
     { 
-      field: 'cv_match_score',  // Updated to match the backend field name
+      field: 'cv_match_score',
       headerName: 'CV Match', 
-      width: 160,  // Increased width to accommodate percentage
+      width: 160,
       valueGetter: (params) => {
         const matchScore = params.row.cv_match_score;
         if (matchScore === undefined || matchScore === null) return 0;
@@ -131,23 +156,12 @@ const CandidateList = () => {
         if (matchScore === undefined || matchScore === null) return null;
         
         return (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <StyledRating
-              value={matchScore / 20}
-              readOnly
-              precision={0.5}
-              max={5}
-            />
-            <Typography 
-              variant="caption" 
-              sx={{ 
-                color: 'text.secondary',
-                minWidth: '35px'  // Ensure consistent width for percentage
-              }}
-            >
-              {matchScore}%
-            </Typography>
-          </Box>
+          <StyledRating
+            value={matchScore / 20}
+            readOnly
+            precision={0.5}
+            max={5}
+          />
         );
       }
     },
@@ -186,11 +200,12 @@ const CandidateList = () => {
       field: 'source', 
       headerName: 'Source', 
       width: 130,
+      cellClassName: 'source-column',
       renderCell: (params) => (
         <Chip
           label={params.value || 'Direct'}
           size="small"
-          color="primary"
+          color="default"
           variant="outlined"
         />
       )
@@ -213,6 +228,7 @@ const CandidateList = () => {
       field: 'feedback', 
       headerName: 'Feedback', 
       width: 130,
+      cellClassName: 'feedback-column',
       renderCell: (params) => {
         const value = params.value || 'Neutral';
         return (
@@ -231,11 +247,24 @@ const CandidateList = () => {
       width: 130,
       renderCell: (params) => {
         const stage = params.value || 'Screening';
+        const stageColors = {
+          'Screening': '#e3f2fd',  // Light blue
+          'Interview': '#e8f5e9',  // Light green
+          'Offer': '#f3e5f5',     // Light purple
+          'Rejected': '#ffebee',   // Light red
+        };
         return (
           <Chip
             label={stage}
             size="small"
             className={`status-${stage.toLowerCase()}`}
+            sx={{
+              backgroundColor: stageColors[stage] || '#f5f5f5',
+              color: 'text.primary',
+              '& .MuiChip-label': {
+                color: 'text.primary',
+              }
+            }}
           />
         );
       }
@@ -327,7 +356,15 @@ const CandidateList = () => {
           <InputLabel>Filter by Job</InputLabel>
           <Select
             value={selectedJob || ''}
-            onChange={(e) => setSelectedJob(e.target.value)}
+            onChange={(e) => {
+              const newJobId = e.target.value;
+              setSelectedJob(newJobId);
+              if (newJobId) {
+                navigate(`/candidates?jobId=${newJobId}`);
+              } else {
+                navigate('/candidates');
+              }
+            }}
             label="Filter by Job"
           >
             <MenuItem value="">
@@ -343,7 +380,7 @@ const CandidateList = () => {
         <Button
           variant="contained"
           startIcon={<AddIcon />}
-          onClick={() => navigate('/upload')}
+          onClick={() => navigate('/job-selection')}
         >
           Add Candidate
         </Button>

@@ -1,65 +1,58 @@
 import React, { useState } from 'react';
-import { Container, Paper, Button, Typography, Box, LinearProgress } from '@mui/material';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { Container, Paper, Button, Typography, Box, LinearProgress, Alert } from '@mui/material';
+import { useParams, useNavigate } from 'react-router-dom';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import axios from 'axios';
 
 const ResumeUpload = () => {
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [uploadStatus, setUploadStatus] = useState('');
-  const [searchParams] = useSearchParams();
+  const [error, setError] = useState(null);
   const navigate = useNavigate();
-  const jobId = searchParams.get('jobId');
+  const { jobId } = useParams();
 
-  const handleFileChange = (e) => {
-    setFile(e.target.files[0]);
-  };
-
-  const waitForEvaluation = async (jobId, resumeId, maxAttempts = 10) => {
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      try {
-        const response = await axios.get(`http://localhost:5000/api/evaluate/${jobId}/${resumeId}`);
-        if (response.status === 200) {
-          return true; // Evaluation is ready
-        }
-      } catch (error) {
-        if (error.response?.status !== 404) {
-          throw error; // If it's not a 404, something else is wrong
-        }
-      }
-      // Wait 5 seconds before trying again
-      await new Promise(resolve => setTimeout(resolve, 5000));
+  // Redirect to job selection if no job ID is provided
+  React.useEffect(() => {
+    if (!jobId) {
+      navigate('/job-selection');
     }
-    return false; // Evaluation not ready after all attempts
+  }, [jobId, navigate]);
+
+  const handleFileSelect = (event) => {
+    const selectedFile = event.target.files[0];
+    if (selectedFile && selectedFile.type === 'application/pdf') {
+      setFile(selectedFile);
+      setError(null);
+    } else {
+      setError('Please select a PDF file');
+      setFile(null);
+    }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleFileUpload = async () => {
     if (!file) {
-      alert('Please select a file');
-      return;
+      setError('Please select a file first');
+      return null;
+    }
+
+    if (!jobId) {
+      setError('No job selected');
+      return null;
     }
 
     // Validate file type
-    const allowedTypes = ['application/pdf', 'text/plain'];
-    if (!allowedTypes.includes(file.type)) {
-      alert('Please upload a PDF file or plain text document');
-      return;
+    if (file.type !== 'application/pdf') {
+      setError('Please upload a PDF file');
+      return null;
     }
 
     // Validate file size (max 10MB)
     const maxSize = 10 * 1024 * 1024; // 10MB in bytes
     if (file.size > maxSize) {
-      alert('File size must be less than 10MB');
-      return;
+      setError('File size must be less than 10MB');
+      return null;
     }
 
-    if (!jobId) {
-      alert('No job selected');
-      return;
-    }
-
-    setLoading(true);
     const formData = new FormData();
     formData.append('file', file);
     formData.append('job_id', jobId);
@@ -73,60 +66,111 @@ const ResumeUpload = () => {
       });
 
       if (response.status === 201) {
-        const { id: resumeId, status, evaluation_id } = response.data;
-        console.log('Upload response:', response.data);
-        
-        if (status === 'Evaluated' && evaluation_id) {
-          setUploadStatus('Evaluation complete! Redirecting...');
-          navigate(`/evaluation/${jobId}/${resumeId}`);
-        } else {
-          const errorMessage = response.data.error || 'Unknown error during evaluation';
-          setUploadStatus(`Error during evaluation: ${errorMessage}`);
-          alert(`The evaluation process failed: ${errorMessage}. Please try uploading the resume again.`);
-        }
+        const { id: resumeId } = response.data;
+        return resumeId;
       }
     } catch (error) {
-      console.error('Error uploading resume:', error);
-      const errorMessage = error.response?.data?.error || error.message;
-      alert(`Error uploading resume: ${errorMessage}`);
+      console.error('Upload error:', error);
+      setError(error.response?.data?.message || 'Error uploading file');
+      return null;
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    try {
+      const resumeId = await handleFileUpload();
+      if (!resumeId) {
+        return;
+      }
+
+      console.log('Upload successful, navigating to evaluation page...');
+      navigate(`/job/${jobId}/candidates/${resumeId}`);
+    } catch (error) {
+      console.error('Error during upload/navigation:', error);
+      setError(error.response?.data?.message || 'Error processing your request');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Container maxWidth="md">
-      <Box my={4}>
+    <Container maxWidth="md" sx={{ mt: 4 }}>
+      <Paper elevation={3} sx={{ p: 4 }}>
         <Typography variant="h4" component="h1" gutterBottom>
           Upload Resume
         </Typography>
-        <Paper elevation={3} sx={{ p: 3 }}>
-          <form onSubmit={handleSubmit}>
-            <input
-              type="file"
-              accept=".pdf,.doc,.docx"
-              onChange={handleFileChange}
-              style={{ marginBottom: '20px' }}
-            />
-            {loading && (
-              <>
-                <LinearProgress sx={{ my: 2 }} />
-                <Typography variant="body2" color="textSecondary" align="center" sx={{ my: 1 }}>
-                  {uploadStatus || 'Uploading resume...'}
-                </Typography>
-              </>
-            )}
+        
+        {jobId && (
+          <Typography variant="subtitle1" color="textSecondary" gutterBottom>
+            Uploading for Job ID: {jobId}
+          </Typography>
+        )}
+
+        <Box
+          component="form"
+          onSubmit={handleSubmit}
+          sx={{
+            mt: 3,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 2
+          }}
+        >
+          <input
+            accept="application/pdf"
+            style={{ display: 'none' }}
+            id="resume-file"
+            type="file"
+            onChange={handleFileSelect}
+            disabled={loading}
+          />
+          
+          <label htmlFor="resume-file">
             <Button
-              type="submit"
               variant="contained"
-              color="primary"
-              disabled={!file || loading}
+              component="span"
+              startIcon={<CloudUploadIcon />}
+              disabled={loading}
+              sx={{ mb: 2 }}
             >
-              Upload and Evaluate
+              Select PDF File
             </Button>
-          </form>
-        </Paper>
-      </Box>
+          </label>
+
+          {file && (
+            <Typography variant="body1" color="textSecondary">
+              Selected file: {file.name}
+            </Typography>
+          )}
+
+          {error && (
+            <Alert severity="error" sx={{ width: '100%', mt: 2 }}>
+              {error}
+            </Alert>
+          )}
+
+          {loading && (
+            <Box sx={{ width: '100%', mt: 2 }}>
+              <LinearProgress />
+            </Box>
+          )}
+
+          <Button
+            variant="contained"
+            color="primary"
+            type="submit"
+            disabled={!file || loading}
+            sx={{ mt: 3 }}
+          >
+            Upload Resume
+          </Button>
+        </Box>
+      </Paper>
     </Container>
   );
 };

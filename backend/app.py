@@ -8,6 +8,9 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 from websocket_handler import init_websocket
 from notes_routes import notes_bp
+from datetime import datetime, timedelta
+import statistics
+from collections import defaultdict
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "http://localhost:3000"}})
@@ -101,167 +104,179 @@ def upload_resume():
 
         # Read the file content first
         file_content = file.read()
-        resume_text = file_content.decode('utf-8', errors='ignore')
+        
+        # Check if it's a PDF file and extract text accordingly
+        if file.filename.lower().endswith('.pdf'):
+            try:
+                import PyPDF2
+                import io
+                
+                # Create a PDF reader object
+                pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_content))
+                
+                # Extract text from all pages
+                resume_text = ""
+                for page in pdf_reader.pages:
+                    resume_text += page.extract_text() + "\n"
+                
+                print("\n=== PDF Text Extraction Successful ===")
+                print(f"Extracted {len(resume_text)} characters from PDF")
+                
+            except Exception as pdf_error:
+                print(f"PDF extraction failed: {str(pdf_error)}")
+                print("Falling back to UTF-8 decode (may not work properly)")
+                resume_text = file_content.decode('utf-8', errors='ignore')
+        else:
+            # For non-PDF files, decode as UTF-8
+            resume_text = file_content.decode('utf-8', errors='ignore')
+        
+        print("\n=== Resume Content ===")
+        print("Full content of the uploaded document:")
+        print("-" * 80)
+        print(resume_text)
+        print("-" * 80)
+        print(f"\nTotal length: {len(resume_text)} characters")
         print("\n=== Starting Name Extraction ===")
         
-        # First print the start of the resume for debugging
-        print("\nFirst 200 characters of resume:")
-        print(resume_text[:200])
-        
-        # Extract candidate name first
-        name_prompt = f"""
-            You are a resume parser specialized in name extraction.
-            
-            CRITICAL INSTRUCTION:
-            Look ONLY at the FIRST LINE of the resume. Ignore everything else.
-            
-            EXAMPLES OF VALID FIRST LINES:
-            ✓ "John Smith"
-            ✓ "Jane Marie Wilson"
-            ✓ "ROBERT JONES"
-            
-            EXAMPLES OF INVALID FIRST LINES:
-            × "Resume of John Smith"
-            × "Name: John Smith"
-            × "Dr. John Smith, PhD"
-            × "Software Engineer"
-            × "Contact Information:"
-            
+        # Extract profile information
+        profile_prompt = f"""
+            You are a precise resume parser. Extract the candidate's basic profile information.
+
+            TASK:
+            Analyze the resume and extract the following information in a clean JSON format:
+            1. Full Name (required)
+            2. Email Address (if available)
+            3. Phone Number (if available)
+
             EXTRACTION RULES:
-            1. ONLY process the first line of text
-            2. It must be a standalone name
-            3. No titles (Dr., Mr., etc.)
-            4. No degrees (PhD, MBA, etc.)
-            5. No job titles
-            6. No extra words like "Resume" or "CV"
-            
-            FORMAT RULES:
-            1. Return name in Title Case (e.g., "John Smith")
-            2. Only letters and spaces allowed
-            3. Must be 2-3 words
-            4. Each word must start with a capital letter
-            
-            SPECIAL INSTRUCTIONS:
-            - If the first line isn't a clear standalone name, return NULL
-            - Do not look at any other part of the resume
-            - Do not look at email addresses
-            - Do not explain your answer
-            
-            RESUME TO PROCESS:
-            {resume_text}
-            
-            The resume content is between the --- markers below:
-            ---
-            {resume_text}
-            ---
 
-            Validation Rules:
-            1. Header Name Check:
-               - Must be in first 5 lines of resume content
-               - Must be standalone (not part of a sentence)
-               - Must not be a job title or company name
-               - Must look like a personal name format
+            For Full Name:
+            - Look at the header/top section first
+            - Must be 2-3 words
+            - Use proper capitalization (e.g., "John Smith")
+            - Remove titles (Dr., Mr., etc.) and degrees (PhD, MBA)
+            - If no valid name found, use "Unknown Candidate"
 
-            2. Cross-Reference Check:
-               - If an email contains a name, it should partially match the header name
-               - At least one part (first or last name) should match
-               - Only use email as verification, not as primary source
-               
-            3. Name Format Requirements:
-               - 2-3 words only
-               - Only letters and spaces
-               - Each word properly capitalized
-               - No titles (Dr., Mr., etc.)
-               - No degrees (PhD, MBA, etc.)
-               - No job titles or company names
+            For Email:
+            - Must be a valid email format (contains @ and domain)
+            - Prefer professional/personal email over university/company emails
+            - If multiple found, select the primary/most professional one
+            - If none found, return null
 
-            4. Return NULL if:
-               - No clear name in header section
-               - Name looks like a company name
-               - Name is part of a sentence
-               - Name contains job titles or degrees
+            For Phone:
+            - Accept various formats (e.g., +1-123-456-7890, (123) 456-7890)
+            - Remove any extra text (e.g., "Cell:", "Phone:", etc.)
+            - Keep country code if present
+            - If multiple found, select the primary/most complete one
+            - If none found, return null
 
-            Format:
-            - Return ONLY the extracted name with proper capitalization
-            - No additional text or explanation
+            RESPONSE FORMAT:
+            Return ONLY a JSON object with this exact structure:
+            {{
+                "name": "string",
+                "email": "string or null",
+                "phone": "string or null"
+            }}
 
             Resume Content:
             {resume_text}
             """
 
         try:
-            print("\nCalling Gemini for name extraction...")
-            name_response = model.generate_content(name_prompt)
-            candidate_name = name_response.text.strip()
-            print(f"Raw extracted name: '{candidate_name}'")
+            print("\nCalling Gemini for profile extraction...")
+            profile_response = model.generate_content(profile_prompt)
+            profile_text = profile_response.text.strip()
+            print(f"Raw profile response: {profile_text}")
 
-            # Additional debug info about the name
-            if candidate_name:
-                print(f"\nName analysis:")
-                print(f"Length: {len(candidate_name)} chars")
-                print(f"Word count: {len(candidate_name.split())} words")
-                print(f"Words: {candidate_name.split()}")
-                print(f"Characters: {[c for c in candidate_name]}")
-            
-            # Strict name validation
-            is_valid = True
-            reason = ""
-            
-            if not candidate_name or candidate_name.lower() == 'null':
-                is_valid = False
-                reason = "Name is empty or NULL"
-            else:
-                words = candidate_name.split()
-                # Check word count
-                if len(words) < 2 or len(words) > 3:
-                    is_valid = False
-                    reason = f"Name must be 2-3 words (got {len(words)} words)"
-                # Check for invalid characters
-                elif not all(c.isalpha() or c.isspace() for c in candidate_name):
-                    is_valid = False
-                    reason = "Name contains invalid characters (only letters and spaces allowed)"
-                # Check capitalization
-                elif any(not word.istitle() for word in words):
-                    is_valid = False
-                    reason = "Each word must be properly capitalized (e.g., 'John Smith')"
-                # Check for common titles
-                elif any(word.lower() in ['mr', 'mrs', 'ms', 'dr', 'prof'] for word in words):
-                    is_valid = False
-                    reason = "Name contains titles (Mr., Dr., etc.)"
-                # Check for degrees
-                elif any(word.lower() in ['phd', 'mba', 'md', 'ba', 'bs', 'msc'] for word in words):
-                    is_valid = False
-                    reason = "Name contains degrees (PhD, MBA, etc.)"
-                # Check word lengths (no single letter words except middle initials)
-                elif any(len(word) == 1 and (i == 0 or i == len(words)-1) for i, word in enumerate(words)):
-                    is_valid = False
-                    reason = "Single letters only allowed as middle initials"
+            try:
+                # Parse the JSON response (handle markdown code blocks)
+                import json
+                import re
                 
-            if not is_valid:
-                print(f"\nValidation failed: {reason}")
+                # Remove markdown code block formatting if present
+                cleaned_text = profile_text.strip()
+                if cleaned_text.startswith('```json'):
+                    # Extract JSON from markdown code block
+                    json_match = re.search(r'```json\s*(\{.*?\})\s*```', cleaned_text, re.DOTALL)
+                    if json_match:
+                        cleaned_text = json_match.group(1)
+                elif cleaned_text.startswith('```'):
+                    # Remove any generic code block formatting
+                    cleaned_text = re.sub(r'^```.*?\n', '', cleaned_text)
+                    cleaned_text = re.sub(r'\n```$', '', cleaned_text)
+                
+                print(f"Cleaned JSON text: {cleaned_text}")
+                
+                profile_data = json.loads(cleaned_text)
+                
+                # Validate required fields
+                if not isinstance(profile_data, dict):
+                    raise ValueError("Response is not a valid JSON object")
+                
+                # Extract and validate name
+                candidate_name = profile_data.get('name', '').strip()
+                if not candidate_name or candidate_name.lower() == 'null':
+                    candidate_name = 'Unknown Candidate'
+                
+                # Extract contact information
+                email = profile_data.get('email')
+                phone = profile_data.get('phone')
+                
+                # Handle null values properly
+                if email and email.lower() == 'null':
+                    email = None
+                if phone and phone.lower() == 'null':
+                    phone = None
+                
+                print(f"Extracted Profile:")
+                print(f"Name: {candidate_name}")
+                print(f"Email: {email if email else 'Not found'}")
+                print(f"Phone: {phone if phone else 'Not found'}")
+                
+                # Store all profile information
+                profile_data = {
+                    'name': candidate_name,
+                    'name_source': 'resume_parser',
+                    'email': email,
+                    'phone': phone
+                }
+                
+            except (json.JSONDecodeError, ValueError) as e:
+                print(f"Error parsing profile response: {str(e)}")
                 candidate_name = 'Unknown Candidate'
-            
-            print(f"Final candidate name: '{candidate_name}'")
-        except Exception as name_error:
-            print(f"Error extracting name: {str(name_error)}")
+                profile_data = {
+                    'name': candidate_name,
+                    'name_source': 'parse_error'
+                }
+        except Exception as extract_error:
+            print(f"Error in profile extraction: {str(extract_error)}")
             candidate_name = 'Unknown Candidate'
+            profile_data = {
+                'name': candidate_name,
+                'name_source': 'extraction_error'
+            }
+
+        # Create the candidate document first
+        candidate_ref = db.collection('candidates').document()
 
         # Upload to Azure Blob Storage
+        blob_path = f"{job_id}/{candidate_ref.id}_{file.filename}"  # Include candidate ID in blob path
         blob_client = blob_service_client.get_blob_client(
             container=container_name,
-            blob=f"{job_id}/{file.filename}"
+            blob=blob_path
         )
         blob_client.upload_blob(file_content)
 
-        # Store metadata in Firebase with the extracted name
-        candidate_ref = db.collection('candidates').document()
+        # Store metadata in Firebase with the extracted profile
         candidate_ref.set({
             'job_id': job_id,
             'name': candidate_name,
-            'resume_blob_path': f"{job_id}/{file.filename}",
+            'email': profile_data.get('email'),
+            'phone': profile_data.get('phone'),
+            'resume_blob_path': blob_path,
             'upload_date': firestore.SERVER_TIMESTAMP,
             'status': 'Processing',
-            'name_source': 'resume'
+            'name_source': profile_data.get('name_source', 'unknown')
         })
 
         # Get job data for evaluation
@@ -287,58 +302,49 @@ def upload_resume():
             # Start evaluation prompt
             print("\n=== Preparing Evaluation Prompt ===")
             prompt = f"""
-            You are a precise name extraction tool. Analyze this resume and extract the candidate's full name.
+            You are a precise resume parser. Extract the candidate's basic profile information.
 
-            Follow these steps in order:
-            1. Look at the very top of the resume - most candidates put their name prominently at the start
-            2. Check the contact/personal information section for a clearly stated name
-            3. Look for a name in standard resume header formats (e.g., "Name: John Smith" or "JOHN SMITH")
-            4. Check email addresses but ONLY if it clearly contains a full name (e.g., john.smith@ or johnsmith@)
-            5. Look for a signature or closing section that states the name
+            TASK:
+            Analyze the resume and extract the following information in a clean JSON format:
+            1. Full Name (required)
+            2. Email Address (if available)
+            3. Phone Number (if available)
 
-            Rules for name extraction:
-            - Name should contain both first and last name
-            - Ignore any letters after email's @ symbol
-            - Names should follow standard capitalization (e.g., "John Smith" not "JOHN SMITH" or "john smith")
-            - Professional titles (Dr., Mr., Mrs., etc.) should be removed
-            - Degrees (PhD, MBA, etc.) should be removed
-            - Name should not include roles (e.g., "Software Engineer" or "Senior Developer")
+            EXTRACTION RULES:
 
-            Format:
-            - Return ONLY the full name, with no additional text
-            - Use proper capitalization (First Last)
-            - If multiple variations are found, choose the most complete version
-            - If you can't find a name with high confidence that meets these rules, respond with exactly 'Unknown Candidate'
+            For Full Name:
+            - Look at the header/top section first
+            - Must be 2-3 words
+            - Use proper capitalization (e.g., "John Smith")
+            - Remove titles (Dr., Mr., etc.) and degrees (PhD, MBA)
+            - If no valid name found, use "Unknown Candidate"
+
+            For Email:
+            - Must be a valid email format (contains @ and domain)
+            - Prefer professional/personal email over university/company emails
+            - If multiple found, select the primary/most professional one
+            - If none found, return null
+
+            For Phone:
+            - Accept various formats (e.g., +1-123-456-7890, (123) 456-7890)
+            - Remove any extra text (e.g., "Cell:", "Phone:", etc.)
+            - Keep country code if present
+            - If multiple found, select the primary/most complete one
+            - If none found, return null
+
+            RESPONSE FORMAT:
+            Return ONLY a JSON object with this exact structure:
+            {{
+                "name": "string",
+                "email": "string or null",
+                "phone": "string or null"
+            }}
 
             Resume Content:
             {resume_text}
             """
             
-            try:
-                print("Calling Gemini for name extraction...")
-                name_response = model.generate_content(name_prompt)
-                candidate_name = name_response.text.strip()
-                print(f"Raw extracted name: '{candidate_name}'")
-                
-                # Validate and clean the extracted name
-                if not candidate_name or len(candidate_name) > 100 or candidate_name.lower() == 'null':
-                    print("No valid name could be extracted from resume")
-                    candidate_name = 'Unknown Candidate'
-                
-                print(f"Final candidate name: '{candidate_name}'")
-
-                # Update candidate name in database
-                print("Updating candidate record with extracted name")
-                candidate_ref.update({
-                    'name': candidate_name,
-                    'name_source': 'resume'
-                })
-                print("Successfully updated candidate name in database")
-            except Exception as name_error:
-                print(f"Error extracting name: {str(name_error)}")
-                # Fall back to filename
-                candidate_name = file.filename.rsplit('.', 1)[0]
-                candidate_ref.update({'name': candidate_name})
+            # Profile extraction already done, proceed with evaluation
 
             print("\n=== Starting Full Evaluation Process ===")
             print("Preparing evaluation request...")
@@ -737,6 +743,30 @@ def get_candidates_for_job(job_id):
         print(f"Error fetching candidates: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/candidates/<candidate_id>/name', methods=['PUT'])
+def update_candidate_name(candidate_id):
+    """Update candidate name manually"""
+    try:
+        name_data = request.json
+        if not name_data or 'name' not in name_data:
+            return jsonify({"error": "Name is required"}), 400
+
+        candidate_name = name_data['name']
+        
+        # Update candidate name
+        candidate_ref = db.collection('candidates').document(candidate_id)
+        candidate_ref.update({
+            'name': candidate_name,
+            'name_source': 'manual'
+        })
+        
+        return jsonify({
+            "message": "Name updated successfully",
+            "id": candidate_id
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/resume/<path:blob_path>', methods=['GET'])
 def get_resume(blob_path):
     """Stream the resume file for preview"""
@@ -763,6 +793,412 @@ def get_resume(blob_path):
     except Exception as e:
         print(f"Error retrieving resume: {str(e)}")
         return jsonify({"error": "Failed to retrieve resume"}), 500
+
+@app.route('/api/clear-database', methods=['POST'])
+def clear_database():
+    """Clear all records from Firestore database. This is a dangerous operation."""
+    try:
+        # Get confirmation header
+        confirmation = request.headers.get('Confirmation')
+        if confirmation != 'CONFIRM_CLEAR_DATABASE':
+            return jsonify({
+                "error": "Missing or invalid confirmation header. Add 'Confirmation: CONFIRM_CLEAR_DATABASE' header to proceed."
+            }), 400
+
+        # Collections to clear
+        collections = ['candidates', 'jobs', 'evaluations']
+        deleted_counts = {}
+
+        for collection_name in collections:
+            # Get all documents in the collection
+            docs = db.collection(collection_name).stream()
+            count = 0
+            
+            # Delete each document
+            for doc in docs:
+                # If it's a candidate, delete their notes subcollection first
+                if collection_name == 'candidates':
+                    notes_ref = db.collection('candidates').document(doc.id).collection('notes')
+                    notes = notes_ref.stream()
+                    for note in notes:
+                        note.reference.delete()
+                
+                # Delete the main document
+                doc.reference.delete()
+                count += 1
+            
+            deleted_counts[collection_name] = count
+            print(f"Deleted {count} documents from {collection_name}")
+
+        return jsonify({
+            "message": "Database cleared successfully",
+            "deleted_counts": deleted_counts
+        }), 200
+
+    except Exception as e:
+        print(f"Error clearing database: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+# === ENHANCED JOB MANAGEMENT APIs ===
+
+@app.route('/api/jobs/<job_id>', methods=['PUT'])
+def update_job(job_id):
+    """Update job details"""
+    try:
+        print(f"=== Updating Job {job_id} ===")
+        job_data = request.json
+        
+        # Validate job exists
+        job_ref = db.collection('jobs').document(job_id)
+        if not job_ref.get().exists:
+            return jsonify({"error": "Job not found"}), 404
+        
+        # Update with timestamp
+        job_data['lastModified'] = firestore.SERVER_TIMESTAMP
+        job_ref.update(job_data)
+        
+        return jsonify({"message": "Job updated successfully"}), 200
+    except Exception as e:
+        print(f"Error updating job: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/jobs/<job_id>', methods=['DELETE'])
+def delete_job(job_id):
+    """Delete job and associated candidates"""
+    try:
+        print(f"=== Deleting Job {job_id} ===")
+        
+        # Check if job has candidates
+        candidates = db.collection('candidates').where('job_id', '==', job_id).stream()
+        candidate_count = len(list(candidates))
+        
+        if candidate_count > 0:
+            return jsonify({
+                "error": f"Cannot delete job with {candidate_count} candidates. Move or delete candidates first."
+            }), 400
+        
+        # Delete job
+        db.collection('jobs').document(job_id).delete()
+        return jsonify({"message": "Job deleted successfully"}), 200
+    except Exception as e:
+        print(f"Error deleting job: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/jobs/<job_id>/archive', methods=['POST'])
+def archive_job(job_id):
+    """Archive job (soft delete)"""
+    try:
+        job_ref = db.collection('jobs').document(job_id)
+        job_ref.update({
+            'status': 'archived',
+            'archivedDate': firestore.SERVER_TIMESTAMP
+        })
+        return jsonify({"message": "Job archived successfully"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# === ENHANCED CANDIDATE MANAGEMENT APIs ===
+
+@app.route('/api/candidates/<candidate_id>', methods=['PUT'])
+def update_candidate(candidate_id):
+    """Update candidate information"""
+    try:
+        print(f"=== Updating Candidate {candidate_id} ===")
+        candidate_data = request.json
+        
+        candidate_ref = db.collection('candidates').document(candidate_id)
+        if not candidate_ref.get().exists:
+            return jsonify({"error": "Candidate not found"}), 404
+        
+        # Add update timestamp
+        candidate_data['lastModified'] = firestore.SERVER_TIMESTAMP
+        candidate_ref.update(candidate_data)
+        
+        return jsonify({"message": "Candidate updated successfully"}), 200
+    except Exception as e:
+        print(f"Error updating candidate: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/candidates/<candidate_id>/stage', methods=['PUT'])
+def update_candidate_stage(candidate_id):
+    """Update candidate stage in hiring pipeline"""
+    try:
+        stage_data = request.json
+        stage = stage_data.get('stage')
+        
+        if not stage:
+            return jsonify({"error": "Stage is required"}), 400
+        
+        # Validate stage
+        valid_stages = ['NEW', 'SCREENING', 'INTERVIEW_1', 'INTERVIEW_2', 'FINAL_INTERVIEW', 'OFFERED', 'HIRED', 'REJECTED']
+        if stage not in valid_stages:
+            return jsonify({"error": f"Invalid stage. Must be one of: {valid_stages}"}), 400
+        
+        candidate_ref = db.collection('candidates').document(candidate_id)
+        candidate_ref.update({
+            'stage': stage,
+            'stageUpdated': firestore.SERVER_TIMESTAMP,
+            'stageHistory': firestore.ArrayUnion([{
+                'stage': stage,
+                'timestamp': firestore.SERVER_TIMESTAMP,
+                'updatedBy': stage_data.get('updatedBy', 'System')
+            }])
+        })
+        
+        return jsonify({"message": "Candidate stage updated successfully"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/candidates/<candidate_id>/rating', methods=['PUT'])
+def update_candidate_rating(candidate_id):
+    """Update hiring manager rating for candidate"""
+    try:
+        rating_data = request.json
+        rating = rating_data.get('rating')
+        
+        if rating is None or not (0 <= rating <= 5):
+            return jsonify({"error": "Rating must be between 0 and 5"}), 400
+        
+        candidate_ref = db.collection('candidates').document(candidate_id)
+        candidate_ref.update({
+            'managerRating': rating,
+            'ratingUpdated': firestore.SERVER_TIMESTAMP,
+            'ratedBy': rating_data.get('ratedBy', 'Unknown')
+        })
+        
+        return jsonify({"message": "Candidate rating updated successfully"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# === ANALYTICS & METRICS APIs ===
+
+@app.route('/api/analytics/dashboard', methods=['GET'])
+def get_dashboard_analytics():
+    """Get dashboard analytics and metrics"""
+    try:
+        print("=== Generating Dashboard Analytics ===")
+        
+        # Get all jobs and candidates
+        jobs = list(db.collection('jobs').stream())
+        candidates = list(db.collection('candidates').stream())
+        
+        # Basic metrics
+        total_jobs = len(jobs)
+        total_candidates = len(candidates)
+        
+        # Stage distribution
+        stage_counts = defaultdict(int)
+        for candidate in candidates:
+            data = candidate.to_dict()
+            stage = data.get('stage', 'NEW')
+            stage_counts[stage] += 1
+        
+        # CV match score distribution
+        match_scores = []
+        for candidate in candidates:
+            data = candidate.to_dict()
+            if 'cv_match_score' in data and data['cv_match_score'] is not None:
+                match_scores.append(data['cv_match_score'])
+        
+        avg_match_score = statistics.mean(match_scores) if match_scores else 0
+        
+        # Recent activity (last 7 days)
+        seven_days_ago = datetime.now() - timedelta(days=7)
+        recent_candidates = 0
+        for candidate in candidates:
+            data = candidate.to_dict()
+            upload_date = data.get('upload_date')
+            if upload_date:
+                try:
+                    # Handle Firestore timestamp objects
+                    if hasattr(upload_date, 'timestamp'):
+                        upload_time = datetime.fromtimestamp(upload_date.timestamp())
+                    elif hasattr(upload_date, 'seconds'):
+                        upload_time = datetime.fromtimestamp(upload_date.seconds)
+                    else:
+                        # Skip if we can't parse the date
+                        continue
+                    
+                    if upload_time > seven_days_ago:
+                        recent_candidates += 1
+                except Exception as date_error:
+                    print(f"Error parsing upload date: {date_error}")
+                    continue
+        
+        # Job performance metrics
+        job_metrics = []
+        for job in jobs:
+            job_data = job.to_dict()
+            job_candidates = [c for c in candidates if c.to_dict().get('job_id') == job.id]
+            
+            job_metrics.append({
+                'id': job.id,
+                'title': job_data.get('title', 'Unknown'),
+                'candidateCount': len(job_candidates),
+                'avgMatchScore': statistics.mean([
+                    c.to_dict().get('cv_match_score', 0) 
+                    for c in job_candidates 
+                    if c.to_dict().get('cv_match_score')
+                ]) if job_candidates else 0
+            })
+        
+        analytics = {
+            'overview': {
+                'totalJobs': total_jobs,
+                'totalCandidates': total_candidates,
+                'averageMatchScore': round(avg_match_score, 1),
+                'recentCandidates': recent_candidates
+            },
+            'stageDistribution': dict(stage_counts),
+            'jobMetrics': job_metrics,
+            'trends': {
+                'matchScoreDistribution': {
+                    'excellent': len([s for s in match_scores if s >= 80]),
+                    'good': len([s for s in match_scores if 60 <= s < 80]),
+                    'fair': len([s for s in match_scores if 40 <= s < 60]),
+                    'poor': len([s for s in match_scores if s < 40])
+                }
+            }
+        }
+        
+        return jsonify(analytics), 200
+    except Exception as e:
+        print(f"Error generating analytics: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/jobs/<job_id>/analytics', methods=['GET'])
+def get_job_analytics(job_id):
+    """Get detailed analytics for a specific job"""
+    try:
+        print(f"=== Generating Analytics for Job {job_id} ===")
+        
+        # Get job details
+        job_doc = db.collection('jobs').document(job_id).get()
+        if not job_doc.exists:
+            return jsonify({"error": "Job not found"}), 404
+        
+        job_data = job_doc.to_dict()
+        
+        # Get all candidates for this job
+        candidates = list(db.collection('candidates').where('job_id', '==', job_id).stream())
+        
+        # Calculate metrics
+        total_candidates = len(candidates)
+        stage_distribution = defaultdict(int)
+        match_scores = []
+        
+        for candidate in candidates:
+            data = candidate.to_dict()
+            stage = data.get('stage', 'NEW')
+            stage_distribution[stage] += 1
+            
+            if 'cv_match_score' in data and data['cv_match_score'] is not None:
+                match_scores.append(data['cv_match_score'])
+        
+        analytics = {
+            'jobDetails': {
+                'id': job_id,
+                'title': job_data.get('title'),
+                'description': job_data.get('description'),
+                'requiredSkills': job_data.get('required_skills', [])
+            },
+            'candidateMetrics': {
+                'total': total_candidates,
+                'averageMatchScore': round(statistics.mean(match_scores), 1) if match_scores else 0,
+                'stageDistribution': dict(stage_distribution)
+            },
+            'topCandidates': [
+                {
+                    'id': c.id,
+                    'name': c.to_dict().get('name'),
+                    'matchScore': c.to_dict().get('cv_match_score', 0),
+                    'stage': c.to_dict().get('stage', 'NEW')
+                }
+                for c in sorted(candidates, 
+                    key=lambda x: x.to_dict().get('cv_match_score', 0), 
+                    reverse=True)[:5]
+            ]
+        }
+        
+        return jsonify(analytics), 200
+    except Exception as e:
+        print(f"Error generating job analytics: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+# === BULK OPERATIONS APIs ===
+
+@app.route('/api/candidates/bulk-update', methods=['POST'])
+def bulk_update_candidates():
+    """Bulk update multiple candidates"""
+    try:
+        update_data = request.json
+        candidate_ids = update_data.get('candidateIds', [])
+        updates = update_data.get('updates', {})
+        
+        if not candidate_ids or not updates:
+            return jsonify({"error": "candidateIds and updates are required"}), 400
+        
+        # Add timestamp to updates
+        updates['lastModified'] = firestore.SERVER_TIMESTAMP
+        
+        # Update candidates in batch
+        batch = db.batch()
+        for candidate_id in candidate_ids:
+            candidate_ref = db.collection('candidates').document(candidate_id)
+            batch.update(candidate_ref, updates)
+        
+        batch.commit()
+        
+        return jsonify({
+            "message": f"Successfully updated {len(candidate_ids)} candidates"
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# === SEARCH & FILTERING APIs ===
+
+@app.route('/api/candidates/search', methods=['POST'])
+def search_candidates():
+    """Advanced candidate search with filters"""
+    try:
+        search_params = request.json
+        
+        # Start with base query
+        candidates_ref = db.collection('candidates')
+        
+        # Apply filters
+        if 'jobId' in search_params and search_params['jobId']:
+            candidates_ref = candidates_ref.where('job_id', '==', search_params['jobId'])
+        
+        if 'stage' in search_params and search_params['stage']:
+            candidates_ref = candidates_ref.where('stage', '==', search_params['stage'])
+        
+        if 'minMatchScore' in search_params:
+            candidates_ref = candidates_ref.where('cv_match_score', '>=', search_params['minMatchScore'])
+        
+        # Execute query
+        candidates = list(candidates_ref.stream())
+        
+        # Format results
+        results = []
+        for candidate in candidates:
+            data = candidate.to_dict()
+            data['id'] = candidate.id
+            
+            # Apply text search if provided
+            if 'searchText' in search_params and search_params['searchText']:
+                search_text = search_params['searchText'].lower()
+                name = data.get('name', '').lower()
+                email = data.get('email', '').lower()
+                
+                if search_text not in name and search_text not in email:
+                    continue
+            
+            results.append(data)
+        
+        return jsonify({'candidates': results, 'count': len(results)}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     try:

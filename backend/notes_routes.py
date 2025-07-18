@@ -69,32 +69,83 @@ def create_note(candidate_id):
             
         print(f"Found candidate: {candidate.id}")
 
-        # Clean up and prepare the note data
-        cleaned_note_data = {
-            'content': note_data['content'],
-            'timestamp': firestore.SERVER_TIMESTAMP,
-            'interviewer': note_data.get('interviewer', {'name': 'Unknown User', 'avatar': None}),
-            'isSaved': note_data.get('isSaved', True),
-            'type': note_data.get('type', 'candidate_note')
-        }
+        # Check if this is a saved note (feedback)
+        is_saved = note_data.get('isSaved', False)
         
-        # Add note to candidate's notes subcollection
-        print("Creating note in Firestore...")
-        doc_ref = candidate_ref.collection('notes').document()
-        print(f"Generated note ID: {doc_ref.id}")
-        
-        doc_ref.set(cleaned_note_data)
-        print(f"Note {doc_ref.id} saved successfully to Firestore")
-        
-        # Prepare response with the new note ID
-        response_data = cleaned_note_data.copy()
-        response_data['id'] = doc_ref.id
-        
-        # Add the document ID to the response
-        response_data = note_data.copy()
-        response_data['id'] = doc_ref.id
-        
-        return jsonify(response_data), 201
+        if is_saved:
+            # Store in feedback collection
+            feedback_data = {
+                'candidate_id': candidate_id,
+                'content': note_data['content'],
+                'timestamp': firestore.SERVER_TIMESTAMP,
+                'interviewer': note_data.get('interviewer', {'name': 'Current User', 'avatar': None}),
+                'type': 'interview_feedback'
+            }
+            
+            print("Creating feedback in Firestore...")
+            doc_ref = candidate_ref.collection('feedback').document()
+            print(f"Generated feedback ID: {doc_ref.id}")
+            
+            doc_ref.set(feedback_data)
+            print(f"Feedback {doc_ref.id} saved successfully to Firestore")
+            
+            # Prepare response with the new feedback ID (convert timestamp for JSON)
+            response_data = feedback_data.copy()
+            response_data['id'] = doc_ref.id
+            response_data['isSaved'] = True
+            response_data['timestamp'] = datetime.datetime.now().isoformat()
+            
+            return jsonify(response_data), 201
+        else:
+            # Store as regular note (chat message)
+            cleaned_note_data = {
+                'content': note_data['content'],
+                'timestamp': firestore.SERVER_TIMESTAMP,
+                'interviewer': note_data.get('interviewer', {'name': 'Current User', 'avatar': None}),
+                'isSaved': False,
+                'type': 'chat_message'
+            }
+            
+            # Add note to candidate's notes subcollection
+            print("Creating note in Firestore...")
+            doc_ref = candidate_ref.collection('notes').document()
+            print(f"Generated note ID: {doc_ref.id}")
+            
+            doc_ref.set(cleaned_note_data)
+            print(f"Note {doc_ref.id} saved successfully to Firestore")
+            
+            # Prepare response with the new note ID (convert timestamp for JSON)
+            response_data = cleaned_note_data.copy()
+            response_data['id'] = doc_ref.id
+            response_data['timestamp'] = datetime.datetime.now().isoformat()
+            
+            return jsonify(response_data), 201
+            
     except Exception as e:
+        import traceback
         print(f"Error creating note: {str(e)}")
-        return jsonify({'error': 'Failed to create note'}), 500
+        print(f"Full traceback: {traceback.format_exc()}")
+        return jsonify({'error': f'Failed to create note: {str(e)}'}), 500
+
+@notes_bp.route('/api/candidate/<candidate_id>/feedback', methods=['GET'])
+def get_feedback(candidate_id):
+    try:
+        if not db:
+            return jsonify({'error': 'Database not initialized'}), 500
+
+        # Get feedback from candidate's subcollection
+        feedback_ref = db.collection('candidates').document(candidate_id)\
+            .collection('feedback')\
+            .order_by('timestamp', direction=firestore.Query.DESCENDING)\
+            .stream()
+        
+        feedback = []
+        for doc in feedback_ref:
+            feedback_data = doc.to_dict()
+            feedback_data['id'] = doc.id
+            feedback.append(feedback_data)
+            
+        return jsonify({'feedback': feedback}), 200
+    except Exception as e:
+        print(f"Error fetching feedback: {str(e)}")
+        return jsonify({'error': 'Failed to fetch feedback'}), 500

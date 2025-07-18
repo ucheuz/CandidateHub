@@ -14,7 +14,7 @@ import JobSelection from './components/JobSelection';
 const theme = createTheme({
   palette: {
     primary: {
-      main: '#0C3F05',
+      main: '#0274B3',
     },
     secondary: {
       main: '#4FC3F7',
