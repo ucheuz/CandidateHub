@@ -265,40 +265,62 @@ const NotesHub = ({ candidateId }) => {
           gap: 2
         }}
       >
-        {notes.map((note, index) => (
-          <Box 
-            key={index}
-            sx={{
-              display: 'flex',
-              gap: 1,
-              alignItems: 'flex-start'
-            }}
-          >
-            <Avatar src={note.interviewer.avatar}>
-              {note.interviewer.name[0]}
-            </Avatar>
-            <Box>
-              <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
-                {note.interviewer.name}
-              </Typography>
-              <Paper 
-                elevation={1}
-                sx={{ 
-                  p: 1.5,
-                  bgcolor: note.isSaved ? 'primary.light' : 'grey.100',
-                  maxWidth: '80%'
-                }}
-              >
-                <Typography variant="body1">
-                  {note.content}
+        {notes.map((note, index) => {
+          const isCurrentUser = note.interviewer.name === 'Current User';
+          
+          return (
+            <Box 
+              key={index}
+              sx={{
+                display: 'flex',
+                gap: 1,
+                alignItems: 'flex-start',
+                flexDirection: isCurrentUser ? 'row-reverse' : 'row',
+                justifyContent: isCurrentUser ? 'flex-end' : 'flex-start'
+              }}
+            >
+              <Avatar src={note.interviewer.avatar}>
+                {note.interviewer.name[0]}
+              </Avatar>
+              <Box sx={{ maxWidth: '80%' }}>
+                <Typography 
+                  variant="subtitle2" 
+                  sx={{ 
+                    fontWeight: 'bold',
+                    textAlign: isCurrentUser ? 'right' : 'left'
+                  }}
+                >
+                  {isCurrentUser ? 'You' : note.interviewer.name}
                 </Typography>
-              </Paper>
-              <Typography variant="caption" color="text.secondary">
-                {new Date(note.timestamp).toLocaleTimeString()}
-              </Typography>
+                <Paper 
+                  elevation={1}
+                  sx={{ 
+                    p: 1.5,
+                    bgcolor: isCurrentUser 
+                      ? (note.isSaved ? '#0C3F05' : '#1976d2') 
+                      : (note.isSaved ? 'primary.light' : 'grey.100'),
+                    color: isCurrentUser ? 'white' : 'inherit',
+                    borderRadius: isCurrentUser ? '18px 18px 4px 18px' : '18px 18px 18px 4px'
+                  }}
+                >
+                  <Typography variant="body1">
+                    {note.content}
+                  </Typography>
+                </Paper>
+                <Typography 
+                  variant="caption" 
+                  color="text.secondary"
+                  sx={{ 
+                    display: 'block',
+                    textAlign: isCurrentUser ? 'right' : 'left'
+                  }}
+                >
+                  {new Date(note.timestamp).toLocaleTimeString()}
+                </Typography>
+              </Box>
             </Box>
-          </Box>
-        ))}
+          );
+        })}
         {isTyping && (
           <Typography variant="caption" color="text.secondary">
             Someone is typing...

@@ -36,6 +36,7 @@ import SkillsIcon from '@mui/icons-material/Psychology';
 import SaveIcon from '@mui/icons-material/Save';
 import CancelIcon from '@mui/icons-material/Cancel';
 import InfoIcon from '@mui/icons-material/Info';
+import AssessmentIcon from '@mui/icons-material/Assessment';
 
 const JobForm = () => {
   const navigate = useNavigate();
@@ -52,7 +53,11 @@ const JobForm = () => {
     listedBy: 'Current User',
     hiringManagers: '',
     datePosted: null,
-    dateHired: null
+    dateHired: null,
+    // New fields for AI evaluation customization
+    job_template: '',
+    job_specification: '',
+    evaluation_criteria: ''
   });
 
   const jobTypes = [
@@ -80,6 +85,18 @@ const JobForm = () => {
     }
     if (!formData.hiringManagers.trim()) {
       setError('At least one hiring manager is required');
+      return false;
+    }
+    if (!formData.job_template.trim()) {
+      setError('Job template is required for AI evaluation');
+      return false;
+    }
+    if (!formData.job_specification.trim()) {
+      setError('Job specification is required for AI evaluation');
+      return false;
+    }
+    if (!formData.evaluation_criteria.trim()) {
+      setError('Evaluation criteria is required for AI evaluation');
       return false;
     }
     // Check if at least 3 departmental skills are filled
@@ -436,6 +453,114 @@ const JobForm = () => {
                   </CardContent>
                 </Card>
 
+                {/* AI Evaluation Configuration Card */}
+                <Card elevation={2} sx={{ borderRadius: 2, border: '2px solid', borderColor: 'primary.main' }}>
+                  <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                      <AssessmentIcon sx={{ color: 'primary.main' }} />
+                      <Typography variant="h6" sx={{ fontWeight: 600, color: 'primary.main' }}>
+                        AI Evaluation Configuration
+                      </Typography>
+                      <Tooltip title="Configure how AI will evaluate candidates for this specific role">
+                        <InfoIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                      </Tooltip>
+                    </Box>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                      These fields will be used to create a custom AI evaluation prompt specific to this job role.
+                    </Typography>
+                    
+                    <Grid container spacing={3}>
+                      <Grid item xs={12}>
+                        <TextField
+                          fullWidth
+                          label="Job Template"
+                          name="job_template"
+                          value={formData.job_template}
+                          onChange={handleChange}
+                          required
+                          multiline
+                          rows={3}
+                          placeholder="e.g., Senior Software Engineer, Marketing Manager, Data Scientist..."
+                          helperText="Define the overall job template/category for evaluation context"
+                          sx={{ 
+                            '& .MuiOutlinedInput-root': { 
+                              borderRadius: 2 
+                            } 
+                          }}
+                        />
+                        <Box sx={{ mt: 1, p: 2, bgcolor: 'grey.50', borderRadius: 1, border: '1px solid', borderColor: 'grey.200' }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500, mb: 1, display: 'block' }}>
+                            Example Usage:
+                          </Typography>
+                          <Typography variant="body2" sx={{ color: 'grey.600', fontStyle: 'italic' }}>
+                            "Senior Full-Stack Developer with team leadership responsibilities. This role requires building scalable web applications and mentoring junior developers in a fast-paced startup environment."
+                          </Typography>
+                        </Box>
+                      </Grid>
+                      
+                      <Grid item xs={12}>
+                        <TextField
+                          fullWidth
+                          label="Job Specification"
+                          name="job_specification"
+                          value={formData.job_specification}
+                          onChange={handleChange}
+                          required
+                          multiline
+                          rows={4}
+                          placeholder="e.g., 5+ years experience in full-stack development, React/Node.js expertise, team leadership experience..."
+                          helperText="Detailed specifications and requirements for the role"
+                          sx={{ 
+                            '& .MuiOutlinedInput-root': { 
+                              borderRadius: 2 
+                            } 
+                          }}
+                        />
+                        <Box sx={{ mt: 1, p: 2, bgcolor: 'grey.50', borderRadius: 1, border: '1px solid', borderColor: 'grey.200' }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500, mb: 1, display: 'block' }}>
+                            Example Usage:
+                          </Typography>
+                          <Typography variant="body2" sx={{ color: 'grey.600', fontStyle: 'italic' }}>
+                            "• 5+ years experience in React, Node.js, and TypeScript<br/>
+                            • Experience with cloud platforms (AWS/Azure) and containerization<br/>
+                            • Previous team leadership or mentoring experience<br/>
+                            • Strong understanding of agile development methodologies<br/>
+                            • Bachelor's degree in Computer Science or equivalent experience"
+                          </Typography>
+                        </Box>
+                      </Grid>
+                      
+                      <Grid item xs={12}>
+                        <TextField
+                          fullWidth
+                          label="Evaluation Criteria"
+                          name="evaluation_criteria"
+                          value={formData.evaluation_criteria}
+                          onChange={handleChange}
+                          required
+                          multiline
+                          rows={4}
+                          placeholder="e.g., Technical skills assessment, problem-solving ability, communication skills, leadership potential, cultural fit..."
+                          helperText="Specific criteria the AI should focus on when evaluating candidates"
+                          sx={{ 
+                            '& .MuiOutlinedInput-root': { 
+                              borderRadius: 2 
+                            } 
+                          }}
+                        />
+                        <Box sx={{ mt: 1, p: 2, bgcolor: 'grey.50', borderRadius: 1, border: '1px solid', borderColor: 'grey.200' }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500, mb: 1, display: 'block' }}>
+                            Example Usage:
+                          </Typography>
+                          <Typography variant="body2" sx={{ color: 'grey.600', fontStyle: 'italic' }}>
+                            "Focus on technical proficiency in modern web development, ability to architect scalable solutions, leadership and mentoring capabilities, communication skills for cross-team collaboration, and cultural alignment with our innovation-driven startup environment."
+                          </Typography>
+                        </Box>
+                      </Grid>
+                    </Grid>
+                  </CardContent>
+                </Card>
+
                 {/* Hiring Managers Card */}
                 <Card elevation={2} sx={{ borderRadius: 2 }}>
                   <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
@@ -545,12 +670,23 @@ const JobForm = () => {
                       </Typography>
                     </Box>
 
-                    <Box sx={{ mb: 3 }}>
+                    <Box sx={{ mb: 2 }}>
                       <Typography variant="body2" color="text.secondary">
                         Hiring Managers
                       </Typography>
                       <Typography variant="body1" sx={{ fontWeight: 500 }}>
                         {getManagersPreview().length} managers
+                      </Typography>
+                    </Box>
+
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        AI Evaluation
+                      </Typography>
+                      <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                        {formData.job_template && formData.job_specification && formData.evaluation_criteria 
+                          ? 'Configured' 
+                          : 'Not configured'}
                       </Typography>
                     </Box>
 

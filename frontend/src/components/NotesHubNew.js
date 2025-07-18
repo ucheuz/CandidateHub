@@ -24,7 +24,7 @@ import {
   Groups as GroupsIcon,
 } from '@mui/icons-material';
 
-const NotesHub = ({ candidateId }) => {
+const NotesHub = ({ candidateId, onNoteSaved }) => {
   const [notes, setNotes] = useState([]);
   const [feedback, setFeedback] = useState([]);
   const [allMessages, setAllMessages] = useState([]);
@@ -293,6 +293,11 @@ const NotesHub = ({ candidateId }) => {
             setNotes(prev => prev.map(note => 
               note.tempId === tempId ? savedNote : note
             ));
+          }
+          
+          // Trigger sentiment analysis callback only for saved feedback notes
+          if (shouldSave && onNoteSaved && typeof onNoteSaved === 'function') {
+            onNoteSaved();
           }
         } catch (e) {
           console.error('Error parsing success response:', e);

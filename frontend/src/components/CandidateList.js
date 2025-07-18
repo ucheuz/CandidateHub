@@ -328,17 +328,34 @@ const CandidateList = () => {
         const candidatesList = await Promise.all(querySnapshot.docs.map(async doc => {
           const data = doc.data();
           
-          // Get latest notes for candidate
-          const notesRef = collection(doc.ref, 'notes');
-          const notesQuery = query(notesRef, orderBy('timestamp', 'desc'), limit(1));
-          const notesSnapshot = await getDocs(notesQuery);
-          const latestNote = notesSnapshot.docs[0]?.data();
+          // Use stored sentiment analysis or default to Neutral
+          let feedback = data.feedback_sentiment || 'Neutral';
+          
+          // If no sentiment analysis exists, trigger analysis
+          if (!data.feedback_sentiment) {
+            try {
+              const response = await fetch(`http://localhost:5000/api/candidates/${doc.id}/sentiment-analysis`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+              });
+              
+              if (response.ok) {
+                const sentimentData = await response.json();
+                feedback = sentimentData.sentiment;
+              }
+            } catch (error) {
+              console.log(`Could not analyze sentiment for candidate ${doc.id}:`, error);
+              // Keep default 'Neutral' if analysis fails
+            }
+          }
           
           const formattedData = {
             id: doc.id,
             ...data,
             name: formatName(data.name),
-            feedback: latestNote?.sentiment || 'Neutral',
+            feedback: feedback,
           };
           return formattedData;
         }));

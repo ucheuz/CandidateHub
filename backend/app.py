@@ -354,58 +354,81 @@ def upload_resume():
             print(f"Required Skills Length: {len(job_data['required_skills'])} chars")
             print(f"Resume Content Length: {len(resume_text)} chars")
             
-            # Create evaluation prompt
+            # Create evaluation prompt with job-specific configuration
+            job_template = job_data.get('job_template', 'General Position')
+            job_specification = job_data.get('job_specification', job_data['description'])
+            evaluation_criteria = job_data.get('evaluation_criteria', 'General skills and experience assessment')
+            
             prompt = f"""
+            Job Template: {job_template}
+            
             Job Description:
             {job_data['description']}
+            
+            Job Specification:
+            {job_specification}
             
             Required Skills:
             {job_data['required_skills']}
             
+            Evaluation Criteria:
+            {evaluation_criteria}
+            
             Resume Content:
             {resume_text}
             
-            Please evaluate this candidate's resume against the job description and provide your evaluation in the following format:
+            Please evaluate this candidate's resume against the job requirements using the specific evaluation criteria provided. Focus your assessment on the job template "{job_template}" and the specific evaluation criteria mentioned above.
+            
+            IMPORTANT: Structure your response in a professional format with clear sections and bullet points. Use formal business language and provide specific, actionable insights.
 
             ---SUMMARY START---
             Match Score: [0-100]
-            Quick Assessment: [One clear sentence on overall fit]
+            Quick Assessment: [One clear, professional sentence on overall fit for this specific role]
 
             Key Points:
-            - Skills Match: [Top 3-4 key skills]
-            - Strongest Asset: [Most impressive qualification/experience]
-            - Growth Area: [Primary development need]
+            • Skills Match: [Top 3-4 key skills relevant to the evaluation criteria]
+            • Strongest Asset: [Most impressive qualification/experience for this job template]
+            • Growth Area: [Primary development need based on job specification]
             ---SUMMARY END---
 
             ---DETAILED EVALUATION START---
-            1. Match Score Rationale
-            - Detailed explanation of the match score
-            - Key factors that influenced the rating
-            - Potential impact on the role
+            ## Professional Candidate Assessment
 
-            2. Skills & Qualifications
-            - Direct matches with required skills
-            - Additional relevant capabilities
-            - Technical proficiencies and certifications
-            - Quantified achievements where available
+            ### 1. Match Score Analysis
+            • **Overall Score Rationale**: Detailed explanation of the match score based on the job template and specification
+            • **Key Scoring Factors**: Primary factors that influenced the rating specific to this role
+            • **Evaluation Criteria Alignment**: How the candidate aligns with the provided evaluation criteria
 
-            3. Experience Alignment
-            - Relevant role experience
-            - Project scope and scale
-            - Leadership and management history
-            - Industry expertise
+            ### 2. Skills & Qualifications Assessment
+            • **Direct Skill Matches**: Specific matches with required skills for this job template
+            • **Additional Relevant Capabilities**: Other skills that support the evaluation criteria
+            • **Technical Proficiencies**: Certifications and technical skills relevant to the job specification
+            • **Quantified Achievements**: Measurable accomplishments that align with role requirements
 
-            4. Strengths & Value Add
-            - Top 3 strengths for this position
-            - Supporting examples from experience
-            - Expected contributions to the role
-            - Unique differentiators
+            ### 3. Experience Alignment for {job_template}
+            • **Relevant Role Experience**: Direct experience matching this specific job template
+            • **Project Scope & Scale**: Past projects that align with the job specification requirements
+            • **Leadership & Management**: Leadership experience (if relevant to evaluation criteria)
+            • **Industry Expertise**: Domain knowledge aligned with the position requirements
 
-            5. Development Areas
-            - Areas needing growth (2-3 specific points)
-            - Impact on role performance
-            - Suggested development paths
-            - Mitigating factors or existing foundations
+            ### 4. Strengths & Value Proposition
+            • **Top 3 Strengths**: Most relevant strengths for this {job_template} position
+            • **Supporting Evidence**: Specific examples from experience that match the evaluation criteria
+            • **Expected Contributions**: Anticipated value based on the job specification
+            • **Unique Differentiators**: What sets this candidate apart for this specific role
+
+            ### 5. Development Areas & Recommendations
+            • **Growth Opportunities**: Areas needing development based on job specification (2-3 specific points)
+            • **Performance Impact**: How these areas might affect role performance
+            • **Development Pathways**: Suggested growth paths aligned with evaluation criteria
+            • **Mitigating Factors**: Existing foundations or transferable skills relevant to the job template
+
+            ### 6. Hiring Recommendation
+            • **Overall Assessment**: Professional summary of candidate suitability
+            • **Risk Factors**: Potential challenges or concerns to consider
+            • **Onboarding Focus**: Key areas to address during initial period
+            • **Long-term Potential**: Growth trajectory and advancement possibilities
+            ---DETAILED EVALUATION END---
             """
 
             try:
@@ -1209,10 +1232,10 @@ def bulk_update_candidates():
         update_data = request.json
         candidate_ids = update_data.get('candidateIds', [])
         updates = update_data.get('updates', {})
-        
+
         if not candidate_ids or not updates:
             return jsonify({"error": "candidateIds and updates are required"}), 400
-        
+
         # Add timestamp to updates
         updates['lastModified'] = firestore.SERVER_TIMESTAMP
         
@@ -1273,6 +1296,144 @@ def search_candidates():
         
         return jsonify({'candidates': results, 'count': len(results)}), 200
     except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/candidates/<candidate_id>/sentiment-analysis', methods=['POST'])
+def analyze_candidate_sentiment(candidate_id):
+    """Analyze sentiment of all notes for a candidate and return summary and sentiment classification"""
+    try:
+        print(f"\n=== Analyzing Sentiment for Candidate {candidate_id} ===")
+        
+        # Get only saved feedback notes for this candidate (not quick chat messages)
+        notes_ref = db.collection('candidates').document(candidate_id).collection('notes')
+        notes_docs = notes_ref.stream()
+        
+        saved_feedback_notes = []
+        interviewers = set()
+        feedback_by_interviewer = {}
+        
+        for doc in notes_docs:
+            note_data = doc.to_dict()
+            # Only analyze saved feedback notes, not quick chat messages
+            if note_data.get('isSaved', False) and note_data.get('content'):
+                content = note_data['content']
+                interviewer_info = note_data.get('interviewer', {})
+                interviewer_name = interviewer_info.get('name', 'Unknown Interviewer')
+                
+                saved_feedback_notes.append(content)
+                interviewers.add(interviewer_name)
+                
+                # Group feedback by interviewer
+                if interviewer_name not in feedback_by_interviewer:
+                    feedback_by_interviewer[interviewer_name] = []
+                feedback_by_interviewer[interviewer_name].append(content)
+        
+        if not saved_feedback_notes:
+            return jsonify({
+                "summary": "No saved feedback notes available for this candidate.",
+                "sentiment": "Neutral",
+                "confidence": 0.0,
+                "notes_count": 0,
+                "interviewers": []
+            }), 200
+        
+        print(f"Found {len(saved_feedback_notes)} saved feedback notes from {len(interviewers)} interviewer(s)")
+        print(f"Interviewers: {list(interviewers)}")
+        
+        # Combine all saved feedback notes for analysis
+        combined_notes = "\n\n".join(saved_feedback_notes)
+        
+        # Create interviewer breakdown for the prompt
+        interviewer_breakdown = []
+        for interviewer, notes in feedback_by_interviewer.items():
+            interviewer_breakdown.append(f"=== {interviewer} ===\n" + "\n".join(notes))
+        
+        interviewer_section = "\n\n".join(interviewer_breakdown)
+        
+        # Create sentiment analysis prompt
+        prompt = f"""
+        You are an expert in sentiment analysis for HR and recruitment feedback. 
+        Analyze the following SAVED FEEDBACK NOTES from {len(interviewers)} interviewer(s) about a job candidate and provide:
+        
+        1. A professional summary of the key feedback themes across all interviewers
+        2. Overall sentiment classification (Positive, Neutral, or Negative)
+        3. Confidence level (0.0 to 1.0)
+        4. Key themes that emerged from the feedback
+        5. Consensus level among interviewers
+        
+        Feedback Notes by Interviewer:
+        {interviewer_section}
+        
+        Please respond in the following JSON format:
+        {{
+            "summary": "A professional summary of key feedback themes and patterns from all interviewers' saved feedback notes",
+            "sentiment": "Positive/Neutral/Negative",
+            "confidence": 0.85,
+            "key_themes": ["theme1", "theme2", "theme3"],
+            "consensus_level": "High/Medium/Low",
+            "interviewer_insights": "Brief note on consistency/differences between interviewers"
+        }}
+        
+        Guidelines:
+        - Positive: Generally favorable feedback, strengths highlighted, recommendation for hiring
+        - Neutral: Mixed feedback, balanced pros/cons, neutral stance
+        - Negative: Concerns raised, weaknesses highlighted, hesitation about hiring
+        - Confidence: How certain you are about the sentiment classification
+        - Summary: Professional, objective summary suitable for HR review
+        """
+        
+        print("Sending sentiment analysis request to Gemini...")
+        response = model.generate_content(prompt)
+        
+        if not hasattr(response, 'text'):
+            raise Exception("Invalid response format from Gemini")
+        
+        print("Received response from Gemini")
+        
+        # Try to parse JSON response
+        import json
+        try:
+            result = json.loads(response.text)
+            print(f"Parsed sentiment result: {result}")
+        except json.JSONDecodeError:
+            print("Failed to parse JSON, extracting manually...")
+            # Fallback: extract sentiment manually
+            text = response.text.lower()
+            if 'positive' in text:
+                sentiment = 'Positive'
+            elif 'negative' in text:
+                sentiment = 'Negative'
+            else:
+                sentiment = 'Neutral'
+            
+            result = {
+                "summary": response.text,
+                "sentiment": sentiment,
+                "confidence": 0.7,
+                "key_themes": []
+            }
+        
+        # Add metadata
+        result['notes_count'] = len(saved_feedback_notes)
+        result['interviewers'] = list(interviewers)
+        result['interviewer_count'] = len(interviewers)
+        result['analysis_timestamp'] = firestore.SERVER_TIMESTAMP
+        
+        # Update candidate document with sentiment analysis
+        candidate_ref = db.collection('candidates').document(candidate_id)
+        candidate_ref.update({
+            'feedback_sentiment': result['sentiment'],
+            'feedback_summary': result['summary'],
+            'feedback_confidence': result['confidence'],
+            'feedback_analysis_timestamp': firestore.SERVER_TIMESTAMP
+        })
+        
+        print(f"Updated candidate {candidate_id} with sentiment: {result['sentiment']}")
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        print(f"Error analyzing sentiment: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':

@@ -38,6 +38,7 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
+  Collapse,
 } from '@mui/material';
 import { 
   Person as PersonIcon,
@@ -56,6 +57,8 @@ import {
   Call as CallIcon,
   Close as CloseIcon,
   CheckCircle as CheckCircleIcon,
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon,
 } from '@mui/icons-material';
 import { useParams } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -86,6 +89,10 @@ const CandidateProfile = () => {
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [updating, setUpdating] = useState(false);
+  const [ratingDialogOpen, setRatingDialogOpen] = useState(false);
+  const [pendingRating, setPendingRating] = useState(0);
+  const [ratingComment, setRatingComment] = useState('');
+  const [showDetailedEvaluation, setShowDetailedEvaluation] = useState(false);
 
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
@@ -113,6 +120,18 @@ const CandidateProfile = () => {
       fetchCandidate();
     }
   }, [candidateId]);
+
+  // Check if manager rating is missing and show dialog
+  useEffect(() => {
+    if (candidate && (!candidate.manager_rating && !candidate.managerRating)) {
+      // Show rating dialog after a short delay to allow UI to load
+      const timer = setTimeout(() => {
+        setRatingDialogOpen(true);
+      }, 1000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [candidate]);
 
   const getMatchScoreColor = (score) => {
     if (score >= 80) return '#4caf50'; // Green
@@ -267,6 +286,111 @@ const CandidateProfile = () => {
     setSnackbarOpen(true);
   };
 
+  const handleRatingSubmit = async () => {
+    if (pendingRating === 0) {
+      setSnackbarMessage('Please select a rating before submitting');
+      setSnackbarOpen(true);
+      return;
+    }
+
+    setUpdating(true);
+    try {
+      const response = await fetch(`http://localhost:5000/api/candidates/${candidateId}/rating`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          rating: pendingRating,
+          comment: ratingComment.trim() || null,
+          ratedBy: 'Current User',
+          ratedAt: new Date().toISOString()
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update candidate rating');
+      }
+
+      // Update local state
+      setCandidate(prev => ({ 
+        ...prev, 
+        manager_rating: pendingRating,
+        managerRating: pendingRating,  // Also update the camelCase version for consistency
+        rating_comment: ratingComment.trim() || null 
+      }));
+      
+      setRatingDialogOpen(false);
+      setPendingRating(0);
+      setRatingComment('');
+      setSnackbarMessage('Candidate rating updated successfully');
+      setSnackbarOpen(true);
+    } catch (err) {
+      console.error('Error updating candidate rating:', err);
+      setSnackbarMessage('Failed to update rating. Please try again.');
+      setSnackbarOpen(true);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleRatingCancel = () => {
+    setRatingDialogOpen(false);
+    setPendingRating(0);
+    setRatingComment('');
+  };
+
+  const handleRatingLater = () => {
+    setRatingDialogOpen(false);
+    setPendingRating(0);
+    setRatingComment('');
+    setSnackbarMessage('You can rate this candidate later from the profile page');
+    setSnackbarOpen(true);
+  };
+
+  const handleAnalyzeSentiment = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`http://localhost:5000/api/candidates/${candidateId}/sentiment-analysis`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to analyze sentiment');
+      }
+      
+      const sentimentData = await response.json();
+      
+      // Update candidate state with new sentiment data
+      setCandidate(prev => ({
+        ...prev,
+        feedback_sentiment: sentimentData.sentiment,
+        feedback_summary: sentimentData.summary,
+        feedback_confidence: sentimentData.confidence,
+        interviewers: sentimentData.interviewers || [],
+        interviewer_count: sentimentData.interviewer_count || 0,
+        key_themes: sentimentData.key_themes || [],
+        consensus_level: sentimentData.consensus_level,
+        interviewer_insights: sentimentData.interviewer_insights
+      }));
+      
+      setSnackbarMessage(
+        `Feedback sentiment analysis completed successfully. Analyzed feedback from ${sentimentData.interviewer_count || 0} interviewer(s).`
+      );
+      setSnackbarOpen(true);
+      
+    } catch (error) {
+      console.error('Error analyzing sentiment:', error);
+      setSnackbarMessage('Failed to analyze sentiment. Please try again.');
+      setSnackbarOpen(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const TabPanel = ({ children, value, index, ...other }) => {
     return (
       <div
@@ -394,9 +518,14 @@ const CandidateProfile = () => {
                 <Grid item xs={6}>
                   <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'white', boxShadow: 1, border: '1px solid #e9ecef' }}>
                     <Rating 
-                      value={candidate.managerRating || 0} 
+                      value={candidate.managerRating || candidate.manager_rating || 0} 
                       readOnly 
-                      sx={{ color: '#ffc107' }}
+                      sx={{ 
+                        color: '#0C3F05',
+                        '& .MuiRating-iconFilled': {
+                          color: '#0C3F05',
+                        }
+                      }}
                     />
                     <Typography variant="body2" sx={{ color: '#6c757d' }}>
                       Manager Rating
@@ -556,21 +685,142 @@ const CandidateProfile = () => {
           <Grid item xs={12} md={8}>
             <Card sx={{ bgcolor: 'white', boxShadow: 2 }}>
               <CardContent>
-                <Typography variant="h6" gutterBottom sx={{ color: '#343a40' }}>
-                  AI Evaluation Summary
+                <Typography variant="h6" gutterBottom sx={{ color: '#0C3F05' }}>
+                  AI Evaluation
                 </Typography>
                 {candidate.evaluation ? (
                   <Box>
-                    <Typography variant="body1" paragraph>
+                    <Typography variant="body1" paragraph sx={{ lineHeight: 1.6 }}>
                       {candidate.evaluation.summary}
                     </Typography>
+                    
+                    {/* Expandable Detailed Analysis */}
+                    {candidate.evaluation.detail && (
+                      <Box>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          onClick={() => setShowDetailedEvaluation(!showDetailedEvaluation)}
+                          sx={{ 
+                            mb: 2, 
+                            color: '#0C3F05',
+                            borderColor: '#0C3F05',
+                            '&:hover': {
+                              borderColor: '#0C3F05',
+                              backgroundColor: '#f5f5f5'
+                            }
+                          }}
+                          startIcon={showDetailedEvaluation ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                        >
+                          {showDetailedEvaluation ? 'Show Less' : 'See More Details'}
+                        </Button>
+                        
+                        <Collapse in={showDetailedEvaluation}>
+                          <Box sx={{ 
+                            p: 2, 
+                            backgroundColor: '#f8f9fa',
+                            borderRadius: 1,
+                            border: '1px solid #e9ecef'
+                          }}>
+                            <Typography variant="h6" sx={{ mb: 1.5, color: '#0C3F05' }}>
+                              Detailed Analysis
+                            </Typography>
+                            <Typography variant="body1" sx={{ whiteSpace: 'pre-line', lineHeight: 1.6 }}>
+                              {candidate.evaluation.detail}
+                            </Typography>
+                          </Box>
+                        </Collapse>
+                      </Box>
+                    )}
+                    
+                    {/* Feedback Sentiment Analysis */}
                     <Divider sx={{ my: 2 }} />
-                    <Typography variant="h6" gutterBottom>
-                      Detailed Analysis
-                    </Typography>
-                    <Typography variant="body1" sx={{ whiteSpace: 'pre-line' }}>
-                      {candidate.evaluation.detail}
-                    </Typography>
+                    <Box sx={{ mt: 2 }}>
+                      <Typography variant="h6" sx={{ mb: 1.5, color: '#0C3F05' }}>
+                        Saved Feedback Sentiment Analysis
+                      </Typography>
+                      {candidate.feedback_summary ? (
+                        <Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                            <Typography variant="body2" sx={{ mr: 1 }}>
+                              Overall Sentiment:
+                            </Typography>
+                            <Chip 
+                              label={candidate.feedback_sentiment || 'Neutral'} 
+                              size="small"
+                              sx={{
+                                backgroundColor: 
+                                  candidate.feedback_sentiment === 'Positive' ? '#4caf50' :
+                                  candidate.feedback_sentiment === 'Negative' ? '#f44336' : '#9e9e9e',
+                                color: 'white',
+                                fontWeight: 'bold'
+                              }}
+                            />
+                            {candidate.feedback_confidence && (
+                              <Typography variant="body2" sx={{ ml: 1, color: '#666' }}>
+                                (Confidence: {Math.round(candidate.feedback_confidence * 100)}%)
+                              </Typography>
+                            )}
+                          </Box>
+                          
+                          {/* Interviewer Information */}
+                          {candidate.interviewers && candidate.interviewers.length > 0 && (
+                            <Box sx={{ mb: 1 }}>
+                              <Typography variant="body2" sx={{ color: '#666', mb: 0.5 }}>
+                                Feedback from {candidate.interviewer_count} interviewer(s):
+                              </Typography>
+                              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                                {candidate.interviewers.map((interviewer, index) => (
+                                  <Chip
+                                    key={index}
+                                    label={interviewer}
+                                    size="small"
+                                    variant="outlined"
+                                    sx={{ 
+                                      fontSize: '0.75rem',
+                                      height: '24px',
+                                      color: '#0C3F05',
+                                      borderColor: '#0C3F05'
+                                    }}
+                                  />
+                                ))}
+                              </Box>
+                            </Box>
+                          )}
+                          
+                          <Typography variant="body2" sx={{ 
+                            lineHeight: 1.6, 
+                            backgroundColor: '#f8f9fa',
+                            p: 1.5,
+                            borderRadius: 1,
+                            border: '1px solid #e9ecef'
+                          }}>
+                            {candidate.feedback_summary}
+                          </Typography>
+                        </Box>
+                      ) : (
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <Typography variant="body2" color="text.secondary">
+                            No saved feedback analysis available. Click to analyse saved feedback notes.
+                          </Typography>
+                          <Button
+                            variant="outlined"
+                            size="small"
+                            onClick={handleAnalyzeSentiment}
+                            sx={{ 
+                              color: '#0C3F05',
+                              borderColor: '#0C3F05',
+                              '&:hover': {
+                                borderColor: '#0C3F05',
+                                backgroundColor: '#f5f5f5'
+                              }
+                            }}
+                          >
+                            Analyse Saved Feedback
+                          </Button>
+                        </Box>
+                      )}
+                    </Box>
                   </Box>
                 ) : (
                   <Alert severity="info">
@@ -600,7 +850,7 @@ const CandidateProfile = () => {
               </Typography>
             </Box>
             <Box sx={{ p: 2 }}>
-              <NotesHub candidateId={candidateId} />
+              <NotesHub candidateId={candidateId} onNoteSaved={handleAnalyzeSentiment} />
             </Box>
           </CardContent>
         </Card>
@@ -927,6 +1177,100 @@ const CandidateProfile = () => {
             disabled={!isRejectFormValid()}
           >
             Reject Candidate
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Manager Rating Dialog */}
+      <Dialog open={ratingDialogOpen} onClose={handleRatingCancel} maxWidth="md" fullWidth>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <StarIcon sx={{ color: '#0C3F05' }} />
+            <Typography variant="h6">Rate This Candidate</Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 3 }}>
+            As a hiring manager, please provide your assessment of this candidate to help track their progress through the hiring process.
+          </DialogContentText>
+          
+          <Box sx={{ textAlign: 'center', mb: 3 }}>
+            <Typography variant="h6" gutterBottom>
+              How would you rate this candidate?
+            </Typography>
+            <Rating
+              name="manager-rating"
+              value={pendingRating}
+              onChange={(event, newValue) => {
+                setPendingRating(newValue || 0);
+              }}
+              size="large"
+              sx={{ 
+                fontSize: '2.5rem',
+                color: '#0C3F05',
+                '& .MuiRating-iconFilled': {
+                  color: '#0C3F05',
+                },
+                '& .MuiRating-iconHover': {
+                  color: '#0a3604',
+                }
+              }}
+            />
+            <Box sx={{ mt: 1 }}>
+              <Typography variant="body2" color="text.secondary">
+                {pendingRating === 0 && 'Click to rate'}
+                {pendingRating === 1 && 'Poor - Not a good fit'}
+                {pendingRating === 2 && 'Fair - Some concerns'}
+                {pendingRating === 3 && 'Good - Meets requirements'}
+                {pendingRating === 4 && 'Very Good - Strong candidate'}
+                {pendingRating === 5 && 'Excellent - Outstanding candidate'}
+              </Typography>
+            </Box>
+          </Box>
+
+          <TextField
+            fullWidth
+            label="Additional Comments (Optional)"
+            multiline
+            rows={3}
+            value={ratingComment}
+            onChange={(e) => setRatingComment(e.target.value)}
+            placeholder="Share any specific thoughts about this candidate's strengths, areas for improvement, or overall fit..."
+            sx={{ 
+              '& .MuiOutlinedInput-root': { 
+                borderRadius: 2 
+              } 
+            }}
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button 
+            onClick={handleRatingLater} 
+            color="secondary"
+            variant="text"
+            sx={{ mr: 'auto' }}
+          >
+            Rate Later
+          </Button>
+          <Button 
+            onClick={handleRatingCancel} 
+            color="primary"
+            variant="text"
+            sx={{ color: '#0C3F05' }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleRatingSubmit} 
+            color="primary"
+            variant="contained"
+            disabled={updating || pendingRating === 0}
+            sx={{ 
+              bgcolor: '#0C3F05',
+              '&:hover': { bgcolor: '#0a3604' }
+            }}
+          >
+            {updating ? 'Saving...' : 'Submit Rating'}
           </Button>
         </DialogActions>
       </Dialog>
