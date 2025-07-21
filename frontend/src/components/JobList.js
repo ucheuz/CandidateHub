@@ -18,120 +18,99 @@ const JobList = () => {
   const isTablet = useMediaQuery(theme.breakpoints.down('lg'));
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [hiredCandidates, setHiredCandidates] = useState([]);
 
-  const columns = useMemo(() => {
-    const baseColumns = [
-      {
-        field: 'title',
-        headerName: 'Job Role',
-        flex: isMobile ? 1 : 1.5,
-        minWidth: isMobile ? 150 : 200,
-        renderCell: (params) => (
-          <Button
-            color="primary"
-            onClick={() => navigate(`/job/${params.row.id}/candidates`)}
-            sx={{ 
-              fontSize: isMobile ? '0.75rem' : '0.875rem',
-              textTransform: 'none',
-              whiteSpace: 'normal',
-              lineHeight: 1.2,
-              padding: '4px 8px',
-              justifyContent: 'flex-start'
-            }}
-          >
-            {params.value}
-          </Button>
-        )
-      },
-      {
-        field: 'candidatesCount',
-        headerName: isMobile ? 'Candidates' : 'Candidates In Review',
-        width: isMobile ? 100 : 180,
-        align: 'left',
-        headerAlign: 'left',
-        renderCell: (params) => (
-          <Button
-            color="primary"
-            onClick={() => navigate(`/job/${params.row.id}/candidates`)}
-            sx={{ 
-              fontSize: isMobile ? '0.75rem' : '0.875rem',
-              minWidth: 'auto'
-            }}
-          >
-            {params.value || 0}
-          </Button>
-        )
-      }
-    ];
-
-    // Add additional columns based on screen size
-    if (!isMobile) {
-      baseColumns.splice(1, 0, {
-        field: 'listedBy',
-        headerName: 'Listed By',
-        width: isTablet ? 140 : 180,
-        hide: isMobile
-      });
+  const columns = useMemo(() => [
+    {
+      field: 'title',
+      headerName: 'Job Role',
+      flex: isMobile ? 1 : 1.5,
+      minWidth: isMobile ? 150 : 200,
+      renderCell: (params) => (
+        <Button
+          color="primary"
+          onClick={() => navigate(`/candidates?jobId=${params.row.id}`)}
+          sx={{ 
+            fontSize: isMobile ? '0.75rem' : '0.875rem',
+            textTransform: 'none',
+            whiteSpace: 'normal',
+            lineHeight: 1.2,
+            padding: '4px 8px',
+            justifyContent: 'flex-start'
+          }}
+        >
+          {params.value}
+        </Button>
+      )
+    },
+    {
+      field: 'listedBy',
+      headerName: 'Listed By',
+      minWidth: 120,
+      flex: 1,
+      valueFormatter: (params) => params.value || '-',
+    },
+    {
+      field: 'hiringManagers',
+      headerName: 'Hiring Manager(s)',
+      minWidth: 160,
+      flex: 1.2,
+      valueFormatter: (params) => Array.isArray(params.value) ? params.value.join(', ') : '-',
+    },
+    {
+      field: 'datePosted',
+      headerName: 'Date Posted',
+      minWidth: 120,
+      flex: 1,
+      valueFormatter: (params) => formatDate(params.value),
+    },
+    {
+      field: 'dateHired',
+      headerName: 'Date Hired',
+      minWidth: 120,
+      flex: 1,
+      valueFormatter: (params) => formatDate(params.value),
+    },
+    {
+      field: 'candidatesCount',
+      headerName: isMobile ? 'Candidates' : 'Candidates In Review',
+      width: isMobile ? 100 : 180,
+      align: 'left',
+      headerAlign: 'left',
+      renderCell: (params) => (
+        <Button
+          color="primary"
+          onClick={() => navigate(`/candidates?jobId=${params.row.id}`)}
+          sx={{ 
+            fontSize: isMobile ? '0.75rem' : '0.875rem',
+            minWidth: 'auto'
+          }}
+        >
+          {params.value || 0}
+        </Button>
+      )
     }
-
-    if (!isMobile && !isTablet) {
-      baseColumns.splice(2, 0, {
-        field: 'hiringManagers',
-        headerName: 'Hiring Manager(s)',
-        width: 220,
-        valueGetter: (params) => params.value?.join(', ') || '-'
-      });
-    }
-
-    if (!isMobile) {
-      baseColumns.splice(-1, 0, {
-        field: 'datePosted',
-        headerName: isTablet ? 'Date Posted' : 'Date Posted',
-        width: isTablet ? 140 : 160,
-        valueGetter: (params) => formatDate(params.value),
-        sortComparator: (v1, v2, param1, param2) => {
-          const timestamp1 = param1.api.getCellValue(param1.id, 'datePosted');
-          const timestamp2 = param2.api.getCellValue(param2.id, 'datePosted');
-          return (timestamp1?.seconds || 0) - (timestamp2?.seconds || 0);
-        }
-      });
-    }
-
-    if (!isMobile && !isTablet) {
-      baseColumns.splice(-1, 0, {
-        field: 'dateHired',
-        headerName: 'Date Hired',
-        width: 160,
-        valueGetter: (params) => formatDate(params.value)
-      });
-    }
-
-    return baseColumns;
-  }, [navigate, isMobile, isTablet]);
+  ], [isMobile, navigate]);
 
   useEffect(() => {
     const fetchJobs = async () => {
       try {
-        setLoading(true);
         const jobsCollection = collection(db, 'jobs');
-        const jobsSnapshot = await getDocs(collection(db, 'jobs'));
-        
-        console.log('Found jobs:', jobsSnapshot.size);
-        
+        const jobsSnapshot = await getDocs(jobsCollection);
         const jobsData = await Promise.all(jobsSnapshot.docs.map(async doc => {
           const jobData = doc.data();
-          console.log('Job data:', { id: doc.id, ...jobData });
-          
-          // Get candidates count for this job
-          const candidatesCollection = collection(db, 'candidates');
-          const candidatesSnapshot = await getDocs(
-            query(candidatesCollection, where('job_id', '==', doc.id))
-          );
-          
+          // Count candidates in review for this job
+          const candidatesRef = collection(db, 'candidates');
+          const candidatesQuery = query(candidatesRef, where('job_id', '==', doc.id));
+          const candidatesSnapshot = await getDocs(candidatesQuery);
+          const candidatesInReview = candidatesSnapshot.docs.filter(c => c.data().status !== 'Rejected');
+          // Count hired candidates
+          const hiredCandidates = candidatesSnapshot.docs.filter(c => c.data().status === 'Hired');
+          // Collect hired candidates for analytics
+          const allHired = hiredCandidates.map(c => c.data());
           return {
             id: doc.id,
             title: jobData.title,
-            description: jobData.description,
             required_skills: jobData.required_skills,
             location: jobData.location,
             type: jobData.type,
@@ -139,11 +118,9 @@ const JobList = () => {
             hiringManagers: jobData.hiringManagers || [],
             datePosted: jobData.datePosted || null,
             dateHired: jobData.dateHired || null,
-            candidatesCount: candidatesSnapshot.size
+            candidatesCount: candidatesInReview.length
           };
         }));
-        
-        console.log('Processed jobs:', jobsData);
         setJobs(jobsData);
         setLoading(false);
       } catch (error) {
@@ -151,14 +128,14 @@ const JobList = () => {
         setLoading(false);
       }
     };
-
     fetchJobs();
   }, []);
+// (Removed duplicate block)
 
   return (
     <Container maxWidth="xl" sx={{ px: { xs: 1, sm: 2, md: 3 } }}>
       <Box sx={{ 
-        height: 'calc(100vh - 150px)', 
+        minHeight: 'calc(100vh - 150px)', 
         width: '100%', 
         p: { xs: 1, sm: 2, md: 3 }
       }}>
@@ -194,84 +171,89 @@ const JobList = () => {
             Add New Job
           </Button>
         </Box>
-        
-        <DataGrid
-          rows={jobs}
-          columns={columns}
-          loading={loading}
-          autoHeight
-          density={isMobile ? "compact" : "comfortable"}
-          disableSelectionOnClick
-          components={{
-            Toolbar: GridToolbar,
-          }}
-          componentsProps={{
-            toolbar: {
-              showQuickFilter: true,
-              quickFilterProps: { debounceMs: 500 },
-            },
-          }}
-          sx={{
-            '& .MuiDataGrid-root': {
-              fontSize: { xs: '0.75rem', sm: '0.875rem' }
-            },
-            '& .MuiDataGrid-row:hover': {
-              backgroundColor: 'rgba(25, 118, 210, 0.04)',
-            },
-            '& .MuiDataGrid-cell': {
-              fontSize: { xs: '0.75rem', sm: '0.875rem' },
-              whiteSpace: 'normal',
-              lineHeight: 1.2,
-              display: 'flex',
-              alignItems: 'center',
-              padding: { xs: '4px', sm: '6px', md: '8px' },
-              borderRight: { xs: 'none', sm: '1px solid rgba(224, 224, 224, 1)' }
-            },
-            '& .MuiDataGrid-columnHeader': {
-              fontSize: { xs: '0.75rem', sm: '0.875rem' },
-              lineHeight: 1.2,
-              padding: { xs: '6px', sm: '8px', md: '10px' },
-              fontWeight: 'bold',
-              whiteSpace: 'normal',
-              overflow: 'visible',
-              textOverflow: 'unset'
-            },
-            '& .MuiDataGrid-columnHeaderTitle': {
-              whiteSpace: 'normal',
-              overflow: 'visible',
-              textOverflow: 'unset',
-              lineHeight: 1.2
-            },
-            '& .MuiDataGrid-columnHeaders': {
-              borderBottom: '2px solid rgba(224, 224, 224, 1)'
-            },
-            '& .MuiDataGrid-toolbar': {
-              padding: { xs: '8px', sm: '12px' },
-              flexDirection: { xs: 'column', sm: 'row' },
-              gap: { xs: 1, sm: 0 }
-            },
-            '& .MuiDataGrid-toolbarContainer': {
-              flexWrap: { xs: 'wrap', sm: 'nowrap' }
-            },
-            // Allow content to wrap and scroll vertically within cells
-            '& .MuiDataGrid-cell--textLeft': {
-              whiteSpace: 'normal',
-              minHeight: 'unset !important'
-            },
-            // Mobile specific styles
-            ...(isMobile && {
-              '& .MuiDataGrid-columnHeaders': {
-                minHeight: '40px !important'
+
+        <Box sx={{ bgcolor: 'white', borderRadius: 3, boxShadow: 2, p: 2 }}>
+          <DataGrid
+            rows={jobs}
+            columns={columns}
+            loading={loading}
+            autoHeight
+            density={isMobile ? "compact" : "comfortable"}
+            disableSelectionOnClick
+            components={{
+              Toolbar: GridToolbar,
+            }}
+            componentsProps={{
+              toolbar: {
+                showQuickFilter: true,
+                quickFilterProps: { debounceMs: 500 },
               },
-              '& .MuiDataGrid-row': {
-                minHeight: '48px !important'
+            }}
+            sx={{
+              bgcolor: 'white',
+              borderRadius: 3,
+              boxShadow: 0,
+              '& .MuiDataGrid-root': {
+                fontSize: { xs: '0.75rem', sm: '0.875rem' }
+              },
+              '& .MuiDataGrid-row:hover': {
+                backgroundColor: 'rgba(25, 118, 210, 0.04)',
               },
               '& .MuiDataGrid-cell': {
-                padding: '4px 2px'
-              }
-            })
-          }}
-        />
+                fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                whiteSpace: 'normal',
+                lineHeight: 1.2,
+                display: 'flex',
+                alignItems: 'center',
+                padding: { xs: '4px', sm: '6px', md: '8px' },
+                borderRight: { xs: 'none', sm: '1px solid rgba(224, 224, 224, 1)' }
+              },
+              '& .MuiDataGrid-columnHeader': {
+                fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                lineHeight: 1.2,
+                padding: { xs: '6px', sm: '8px', md: '10px' },
+                fontWeight: 'bold',
+                whiteSpace: 'normal',
+                overflow: 'visible',
+                textOverflow: 'unset'
+              },
+              '& .MuiDataGrid-columnHeaderTitle': {
+                whiteSpace: 'normal',
+                overflow: 'visible',
+                textOverflow: 'unset',
+                lineHeight: 1.2
+              },
+              '& .MuiDataGrid-columnHeaders': {
+                borderBottom: '2px solid rgba(224, 224, 224, 1)'
+              },
+              '& .MuiDataGrid-toolbar': {
+                padding: { xs: '8px', sm: '12px' },
+                flexDirection: { xs: 'column', sm: 'row' },
+                gap: { xs: 1, sm: 0 }
+              },
+              '& .MuiDataGrid-toolbarContainer': {
+                flexWrap: { xs: 'wrap', sm: 'nowrap' }
+              },
+              // Allow content to wrap and scroll vertically within cells
+              '& .MuiDataGrid-cell--textLeft': {
+                whiteSpace: 'normal',
+                minHeight: 'unset !important'
+              },
+              // Mobile specific styles
+              ...(isMobile && {
+                '& .MuiDataGrid-columnHeaders': {
+                  minHeight: '40px !important'
+                },
+                '& .MuiDataGrid-row': {
+                  minHeight: '48px !important'
+                },
+                '& .MuiDataGrid-cell': {
+                  padding: '4px 2px'
+                }
+              })
+            }}
+          />
+        </Box>
       </Box>
     </Container>
   );

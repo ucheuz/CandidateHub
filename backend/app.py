@@ -1018,42 +1018,44 @@ def update_candidate_stage(candidate_id):
         stage_data = request.json
         stage = stage_data.get('stage')
         rejection_reason = stage_data.get('rejectionReason')
-        
+        print(f"=== Candidate Stage Update Debug ===")
+        print(f"Candidate ID: {candidate_id}")
+        print(f"Requested stage: {stage}")
+        print(f"Rejection reason: {rejection_reason}")
         if not stage:
+            print("No stage provided in request.")
             return jsonify({"error": "Stage is required"}), 400
-        
-        # Validate stage
-        valid_stages = ['NEW', 'Evaluated', 'Phone Screen', 'Technical Interview', 'Final Interview', 'Hired', 'Rejected']
+        valid_stages = ['NEW', 'Evaluated', 'Phone Screen', 'Interview 1', 'Interview 2', 'Interview 3', 'Hired', 'Rejected']
         if stage not in valid_stages:
+            print(f"Invalid stage requested: {stage}")
             return jsonify({"error": f"Invalid stage. Must be one of: {valid_stages}"}), 400
-        
         candidate_ref = db.collection('candidates').document(candidate_id)
-        
-        # Prepare update data
-        from datetime import datetime
-        current_time = datetime.now()
-        
-        update_data = {
-            'status': stage,  # Update status field to match frontend
-            'stage': stage,
-            'stageUpdated': firestore.SERVER_TIMESTAMP,
-            'stageHistory': firestore.ArrayUnion([{
+        try:
+            # Prepare update data
+            from datetime import datetime
+            current_time = datetime.now()
+            update_data = {
+                'status': stage,
                 'stage': stage,
-                'timestamp': current_time,
-                'updatedBy': stage_data.get('updatedBy', 'System')
-            }])
-        }
-        
-        # Add rejection reason if provided
-        if stage == 'Rejected' and rejection_reason:
-            update_data['rejectionReason'] = rejection_reason
-            update_data['rejectionDate'] = current_time
-        
-        candidate_ref.update(update_data)
-        
-        return jsonify({"message": "Candidate stage updated successfully"}), 200
+                'stageUpdated': firestore.SERVER_TIMESTAMP,
+                'stageHistory': firestore.ArrayUnion([{
+                    'stage': stage,
+                    'timestamp': current_time,
+                    'updatedBy': stage_data.get('updatedBy', 'System')
+                }])
+            }
+            if stage == 'Rejected' and rejection_reason:
+                update_data['rejectionReason'] = rejection_reason
+                update_data['rejectionDate'] = current_time
+            print(f"Update data: {update_data}")
+            candidate_ref.update(update_data)
+            print("Candidate stage updated successfully.")
+            return jsonify({"message": "Candidate stage updated successfully"}), 200
+        except Exception as update_error:
+            print(f"Firestore update error: {str(update_error)}")
+            return jsonify({"error": f"Firestore update error: {str(update_error)}"}), 500
     except Exception as e:
-        print(f"Error updating candidate stage: {str(e)}")
+        print(f"General error updating candidate stage: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/candidates/<candidate_id>/rating', methods=['PUT'])

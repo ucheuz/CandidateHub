@@ -254,6 +254,25 @@ const CandidateList = () => {
       field: 'status', 
       headerName: 'Stage', 
       width: 130,
+      sortComparator: (v1, v2, param1, param2) => {
+        // Define pipeline order
+        const order = [
+          'Evaluated',
+          'Phone Screen',
+          'Interview 1',
+          'Interview 2',
+          'Interview 3',
+          'Hired'
+        ];
+        // Get index for each value
+        const idx1 = order.indexOf(param1.value);
+        const idx2 = order.indexOf(param2.value);
+        // If not found, treat as lowest priority
+        const safeIdx1 = idx1 === -1 ? -99 : idx1;
+        const safeIdx2 = idx2 === -1 ? -99 : idx2;
+        // Ascending: lower index first, Descending: higher index first
+        return safeIdx1 - safeIdx2;
+      },
       renderCell: (params) => {
         const status = params.value || 'NEW';
         // Map status to display names
@@ -261,9 +280,9 @@ const CandidateList = () => {
           'NEW': 'New',
           'Evaluated': 'Evaluated',
           'Phone Screen': 'Screening',
-          'Interview 1': 'Interview',
-          'Interview 2': 'Interview',
-          'Interview 3': 'Interview',
+          'Interview 1': 'Interview 1',
+          'Interview 2': 'Interview 2',
+          'Interview 3': 'Interview 3',
           'Hired': 'Hired',
           'Rejected': 'Rejected'
         };
@@ -273,7 +292,9 @@ const CandidateList = () => {
           'New': '#e3f2fd',        // Light blue
           'Evaluated': '#e3f2fd',  // Light blue
           'Screening': '#e3f2fd',  // Light blue
-          'Interview': '#e8f5e9',  // Light green
+          'Interview 1': '#e8f5e9',
+          'Interview 2': '#e8f5e9',
+          'Interview 3': '#e8f5e9',
           'Hired': '#f3e5f5',      // Light purple
           'Rejected': '#ffebee',   // Light red
         };
@@ -281,7 +302,7 @@ const CandidateList = () => {
           <Chip
             label={displayName}
             size="small"
-            className={`status-${displayName.toLowerCase()}`}
+            className={`status-${displayName.toLowerCase().replace(/\s/g, '-')}`}
             sx={{
               backgroundColor: stageColors[displayName] || '#f5f5f5',
               color: 'text.primary',
@@ -404,14 +425,12 @@ const CandidateList = () => {
   }, [candidates, statusFilter]);
 
   // Calculate counts for each stage
-  const hasInterview3Candidates = candidates.some(c => c.status === 'Interview 3');
-  
   const stageCounts = {
     NEW: candidates.filter(c => !c.status || c.status === 'NEW' || c.status === 'Evaluated').length,
     SCREENING: candidates.filter(c => c.status === 'Phone Screen').length,
     'INTERVIEW 1': candidates.filter(c => c.status === 'Interview 1').length,
     'INTERVIEW 2': candidates.filter(c => c.status === 'Interview 2').length,
-    ...(hasInterview3Candidates && { 'INTERVIEW 3': candidates.filter(c => c.status === 'Interview 3').length }),
+    'INTERVIEW 3': candidates.filter(c => c.status === 'Interview 3').length,
     OFFERED: candidates.filter(c => c.status === 'Hired').length,
   };
 
@@ -425,53 +444,55 @@ const CandidateList = () => {
 
   return (
     <Box sx={{ height: 'calc(100vh - 100px)', width: '100%', p: 3 }}>
-      <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
-        <Box sx={{ display: 'flex', gap: 2 }}>
-          <FormControl sx={{ minWidth: 200 }}>
-            <InputLabel>Filter by Job</InputLabel>
-            <Select
-              value={selectedJob || ''}
-              onChange={(e) => {
-                const newJobId = e.target.value;
-                setSelectedJob(newJobId);
-                if (newJobId) {
-                  navigate(`/candidates?jobId=${newJobId}`);
-                } else {
-                  navigate('/candidates');
-                }
-              }}
-              label="Filter by Job"
-            >
-              <MenuItem value="">
-                <em>All Jobs</em>
-              </MenuItem>
-              {jobs.map((job) => (
-                <MenuItem key={job.id} value={job.id}>
-                  {job.title}
+      <Box sx={{ mb: 3 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
+          <Paper sx={{ bgcolor: 'white', borderRadius: 3, boxShadow: 2, p: 2, display: 'flex', gap: 2, alignItems: 'center' }}>
+            <FormControl sx={{ minWidth: 200 }}>
+              <InputLabel>Filter by Job</InputLabel>
+              <Select
+                value={selectedJob || ''}
+                onChange={(e) => {
+                  const newJobId = e.target.value;
+                  setSelectedJob(newJobId);
+                  if (newJobId) {
+                    navigate(`/candidates?jobId=${newJobId}`);
+                  } else {
+                    navigate('/candidates');
+                  }
+                }}
+                label="Filter by Job"
+              >
+                <MenuItem value="">
+                  <em>All Jobs</em>
                 </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl sx={{ minWidth: 150 }}>
-            <InputLabel>Status Filter</InputLabel>
-            <Select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              label="Status Filter"
-            >
-              <MenuItem value="active">Active Candidates</MenuItem>
-              <MenuItem value="rejected">Rejected Candidates</MenuItem>
-              <MenuItem value="all">All Candidates</MenuItem>
-            </Select>
-          </FormControl>
+                {jobs.map((job) => (
+                  <MenuItem key={job.id} value={job.id}>
+                    {job.title}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl sx={{ minWidth: 150 }}>
+              <InputLabel>Status Filter</InputLabel>
+              <Select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                label="Status Filter"
+              >
+                <MenuItem value="active">Active Candidates</MenuItem>
+                <MenuItem value="rejected">Rejected Candidates</MenuItem>
+                <MenuItem value="all">All Candidates</MenuItem>
+              </Select>
+            </FormControl>
+          </Paper>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => navigate('/job-selection')}
+          >
+            Add Candidate
+          </Button>
         </Box>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => navigate('/job-selection')}
-        >
-          Add Candidate
-        </Button>
       </Box>
 
       {/* Stage Statistics Bar */}
@@ -508,51 +529,56 @@ const CandidateList = () => {
         ))}
       </Box>
       
-      <StyledDataGrid
-        rows={filteredCandidates}
-        columns={columns}
-        loading={loading}
-        autoHeight
-        density="comfortable"
-        disableSelectionOnClick
-        getRowClassName={(params) => {
-          const status = params.row.status || 'screening';
-          // Map status to CSS class names
-          const statusMap = {
-            'NEW': 'screening',
-            'Evaluated': 'screening',
-            'Phone Screen': 'screening',
-            'Interview 1': 'interview',
-            'Interview 2': 'interview',
-            'Interview 3': 'interview',
-            'Hired': 'offer',
-            'Rejected': 'rejected'
-          };
-          
-          let className = `status-${statusMap[status] || 'screening'}`;
-          
-          // Add rejected row styling
-          if (status === 'Rejected') {
-            className += ' rejected-row';
-          }
-          
-          return className;
-        }}
-        components={{
-          Toolbar: GridToolbar,
-        }}
-        componentsProps={{
-          toolbar: {
-            showQuickFilter: true,
-            quickFilterProps: { debounceMs: 500 },
-          },
-        }}
-        sx={{
-          '& .MuiDataGrid-row:hover': {
-            backgroundColor: 'rgba(25, 118, 210, 0.04)',
-          },
-        }}
-      />
+      <Paper sx={{ bgcolor: 'white', borderRadius: 3, boxShadow: 2, p: 2 }}>
+        <StyledDataGrid
+          rows={filteredCandidates}
+          columns={columns}
+          loading={loading}
+          autoHeight
+          density="comfortable"
+          disableSelectionOnClick
+          getRowClassName={(params) => {
+            const status = params.row.status || 'screening';
+            // Map status to CSS class names
+            const statusMap = {
+              'NEW': 'screening',
+              'Evaluated': 'screening',
+              'Phone Screen': 'screening',
+              'Interview 1': 'interview',
+              'Interview 2': 'interview',
+              'Interview 3': 'interview',
+              'Hired': 'offer',
+              'Rejected': 'rejected'
+            };
+            
+            let className = `status-${statusMap[status] || 'screening'}`;
+            
+            // Add rejected row styling
+            if (status === 'Rejected') {
+              className += ' rejected-row';
+            }
+            
+            return className;
+          }}
+          components={{
+            Toolbar: GridToolbar,
+          }}
+          componentsProps={{
+            toolbar: {
+              showQuickFilter: true,
+              quickFilterProps: { debounceMs: 500 },
+            },
+          }}
+          sx={{
+            bgcolor: 'white',
+            borderRadius: 3,
+            boxShadow: 0,
+            '& .MuiDataGrid-row:hover': {
+              backgroundColor: 'rgba(25, 118, 210, 0.04)',
+            },
+          }}
+        />
+      </Paper>
     </Box>
   );
 };

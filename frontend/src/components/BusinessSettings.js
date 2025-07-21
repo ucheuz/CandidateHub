@@ -35,23 +35,23 @@ import {
   LinearProgress
 } from '@mui/material';
 import {
-  Business,
-  Settings,
-  Notifications,
-  Security,
-  People,
-  Integration,
-  Analytics,
-  Email,
-  Phone,
-  LocationOn,
-  Edit,
-  Add,
-  Delete,
-  Save,
-  Refresh,
-  CloudUpload,
-  Download
+Business,
+Settings,
+Notifications,
+Security,
+People,
+IntegrationInstructions,
+Analytics,
+Email,
+Phone,
+LocationOn,
+Edit,
+Add,
+Delete,
+Save,
+Refresh,
+CloudUpload,
+Download
 } from '@mui/icons-material';
 
 const TabPanel = ({ children, value, index, ...other }) => (
@@ -67,6 +67,21 @@ const TabPanel = ({ children, value, index, ...other }) => (
 );
 
 const BusinessSettings = () => {
+  // Job & Access Management tab state
+  const [jobs, setJobs] = useState([
+    { id: 'job1', title: 'Software Engineer', required_skills: ['React', 'Python'], hiringManagers: ['Sarah Johnson'], department: 'Engineering' },
+    { id: 'job2', title: 'Product Manager', required_skills: ['Agile', 'Leadership'], hiringManagers: ['Mike Chen'], department: 'Product' }
+  ]);
+  const [candidates, setCandidates] = useState([
+    { id: 'cand1', name: 'Alice Smith', job_id: 'job1' },
+    { id: 'cand2', name: 'Bob Lee', job_id: 'job2' }
+  ]);
+  const [selectedJob, setSelectedJob] = useState(null);
+  const [editJobDialog, setEditJobDialog] = useState(false);
+  const [editSkills, setEditSkills] = useState([]);
+  const [selectedCandidate, setSelectedCandidate] = useState(null);
+  const [confirmDeleteJob, setConfirmDeleteJob] = useState(false);
+  const [confirmDeleteCandidate, setConfirmDeleteCandidate] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
   const [companyInfo, setCompanyInfo] = useState({
     name: 'TechCorp Solutions',
@@ -131,7 +146,7 @@ const BusinessSettings = () => {
     const icons = {
       sourcing: <People />,
       job_board: <Business />,
-      ats: <Integration />,
+    ats: <IntegrationInstructions />,
       communication: <Email />,
       video: <Phone />
     };
@@ -146,30 +161,146 @@ const BusinessSettings = () => {
     <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
       {/* Header */}
       <Box mb={4}>
-        <Typography variant="h3" component="h1" gutterBottom fontWeight="bold">
+        <Typography variant="h3" component="h1" gutterBottom fontWeight="bold" sx={{ letterSpacing: 1, color: 'primary.main' }}>
           Business Settings
         </Typography>
-        <Typography variant="h6" color="text.secondary">
-          Configure your organization's recruitment platform
+        <Typography variant="h6" color="text.secondary" sx={{ mb: 1 }}>
+          Configure your organisation's recruitment platform
         </Typography>
+        <Divider sx={{ my: 2 }} />
       </Box>
 
       {/* Settings Navigation */}
-      <Paper sx={{ mb: 3 }}>
+      <Paper elevation={3} sx={{ mb: 3, borderRadius: 3 }}>
         <Tabs
           value={activeTab}
           onChange={handleTabChange}
           variant="scrollable"
           scrollButtons="auto"
-          sx={{ borderBottom: 1, borderColor: 'divider' }}
+          sx={{ borderBottom: 1, borderColor: 'divider', px: 2, pt: 2 }}
         >
-          <Tab icon={<Business />} label="Company Profile" />
-          <Tab icon={<Settings />} label="System Settings" />
-          <Tab icon={<People />} label="Team Management" />
-          <Tab icon={<Integration />} label="Integrations" />
-          <Tab icon={<Analytics />} label="Analytics & Reports" />
-          <Tab icon={<Security />} label="Security & Compliance" />
+          <Tab icon={<Business />} label={<Box fontWeight={600}>Company Profile</Box>} />
+          <Tab icon={<Settings />} label={<Box fontWeight={600}>System Settings</Box>} />
+          <Tab icon={<People />} label={<Box fontWeight={600}>Team Management</Box>} />
+          <Tab icon={<IntegrationInstructions />} label={<Box fontWeight={600}>Integrations</Box>} />
+          <Tab icon={<Analytics />} label={<Box fontWeight={600}>Analytics & Reports</Box>} />
+          <Tab icon={<Security />} label={<Box fontWeight={600}>Security & Compliance</Box>} />
+          <Tab icon={<Edit />} label={<Box fontWeight={600}>Job & Access Management</Box>} />
         </Tabs>
+      {/* Job & Access Management Tab */}
+      <TabPanel value={activeTab} index={6}>
+        <Paper elevation={2} sx={{ p: { xs: 2, md: 4 }, borderRadius: 3 }}>
+          <Typography variant="h5" gutterBottom fontWeight={700} color="primary.main">Job & Access Management</Typography>
+          <Divider sx={{ mb: 3 }} />
+          <Box mb={3}>
+            <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1 }}>Jobs</Typography>
+            <Grid container spacing={2}>
+              {jobs.map(job => (
+                <Grid item xs={12} md={6} key={job.id}>
+                  <Paper elevation={1} sx={{ p: 2, borderRadius: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Avatar sx={{ bgcolor: 'primary.main', mr: 2 }}>{job.title.charAt(0)}</Avatar>
+                    <Box flexGrow={1}>
+                      <Typography fontWeight={600}>{job.title}</Typography>
+                      <Chip label={job.department} size="small" sx={{ ml: 1 }} />
+                      <Box mt={0.5}>
+                        <Chip label={job.required_skills.join(', ')} size="small" color="info" />
+                      </Box>
+                    </Box>
+                    <Box display="flex" gap={1}>
+                      <Button size="small" variant="outlined" onClick={() => { setSelectedJob(job); setEditJobDialog(true); }} title="Edit Job">Edit</Button>
+                      <Button size="small" color="error" variant="outlined" onClick={() => { setSelectedJob(job); setConfirmDeleteJob(true); }} title="Delete Job">Delete</Button>
+                      <Button size="small" variant="outlined" onClick={() => setEditSkills(job.required_skills)} title="Edit Skills">Skills</Button>
+                    </Box>
+                  </Paper>
+                </Grid>
+              ))}
+            </Grid>
+          </Box>
+          <Divider sx={{ my: 2 }} />
+          <Box mb={3}>
+            <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1 }}>Candidates</Typography>
+            <Grid container spacing={2}>
+              {candidates.map(cand => (
+                <Grid item xs={12} md={6} key={cand.id}>
+                  <Paper elevation={1} sx={{ p: 2, borderRadius: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Avatar sx={{ bgcolor: 'secondary.main', mr: 2 }}>{cand.name.charAt(0)}</Avatar>
+                    <Box flexGrow={1}>
+                      <Typography fontWeight={600}>{cand.name}</Typography>
+                    </Box>
+                    <Button size="small" color="error" variant="outlined" onClick={() => { setSelectedCandidate(cand); setConfirmDeleteCandidate(true); }} title="Delete Candidate">Delete</Button>
+                  </Paper>
+                </Grid>
+              ))}
+            </Grid>
+          </Box>
+          <Divider sx={{ my: 2 }} />
+          <Box mb={3}>
+            <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1 }}>Hiring Managers</Typography>
+            <Grid container spacing={2}>
+              {teamMembers.map(member => (
+                <Grid item xs={12} md={6} key={member.id}>
+                  <Paper elevation={1} sx={{ p: 2, borderRadius: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Avatar sx={{ bgcolor: 'info.main', mr: 2 }}>{member.name.charAt(0)}</Avatar>
+                    <Box flexGrow={1}>
+                      <Typography fontWeight={600}>{member.name}</Typography>
+                      <Chip label={member.role} size="small" sx={{ ml: 1 }} />
+                      <Chip label={member.permissions} size="small" sx={{ ml: 1 }} />
+                    </Box>
+                    <Button size="small" variant="outlined" title="Revoke Access">Revoke</Button>
+                  </Paper>
+                </Grid>
+              ))}
+            </Grid>
+            <Button size="small" variant="contained" sx={{ mt: 2 }} onClick={() => setAddMemberDialog(true)}>Add Access</Button>
+          </Box>
+        </Paper>
+        {/* Edit Job Dialog */}
+        <Dialog open={editJobDialog} onClose={() => setEditJobDialog(false)}>
+          <DialogTitle>Edit Job</DialogTitle>
+          <DialogContent sx={{ minWidth: 320 }}>
+            <TextField fullWidth label="Job Title" value={selectedJob?.title || ''} onChange={e => setSelectedJob({ ...selectedJob, title: e.target.value })} sx={{ mb: 2 }} helperText="Enter the job title" />
+            <TextField fullWidth label="Department" value={selectedJob?.department || ''} onChange={e => setSelectedJob({ ...selectedJob, department: e.target.value })} sx={{ mb: 2 }} helperText="Department for this job" />
+            <TextField fullWidth label="Hiring Managers" value={selectedJob?.hiringManagers?.join(', ') || ''} onChange={e => setSelectedJob({ ...selectedJob, hiringManagers: e.target.value.split(',').map(s => s.trim()) })} sx={{ mb: 2 }} helperText="Comma separated names" />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setEditJobDialog(false)}>Cancel</Button>
+            <Button variant="contained" onClick={() => setEditJobDialog(false)}>Save</Button>
+          </DialogActions>
+        </Dialog>
+        {/* Edit Skills Dialog */}
+        <Dialog open={!!editSkills.length} onClose={() => setEditSkills([])}>
+          <DialogTitle>Edit Departmental Skills</DialogTitle>
+          <DialogContent sx={{ minWidth: 320 }}>
+            <TextField fullWidth label="Skills (comma separated)" value={editSkills.join(', ')} onChange={e => setEditSkills(e.target.value.split(',').map(s => s.trim()))} helperText="List key skills for this job" />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setEditSkills([])}>Cancel</Button>
+            <Button variant="contained" onClick={() => setEditSkills([])}>Save</Button>
+          </DialogActions>
+        </Dialog>
+        {/* Confirm Delete Job Dialog */}
+        <Dialog open={confirmDeleteJob} onClose={() => setConfirmDeleteJob(false)}>
+          <DialogTitle>Delete Job</DialogTitle>
+          <DialogContent sx={{ minWidth: 320 }}>
+            <Typography color="error.main">Are you sure you want to delete this job?</Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setConfirmDeleteJob(false)}>Cancel</Button>
+            <Button color="error" variant="contained" onClick={() => setConfirmDeleteJob(false)}>Delete</Button>
+          </DialogActions>
+        </Dialog>
+        {/* Confirm Delete Candidate Dialog */}
+        <Dialog open={confirmDeleteCandidate} onClose={() => setConfirmDeleteCandidate(false)}>
+          <DialogTitle>Delete Candidate</DialogTitle>
+          <DialogContent sx={{ minWidth: 320 }}>
+            <Typography color="error.main">Are you sure you want to delete this candidate?</Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setConfirmDeleteCandidate(false)}>Cancel</Button>
+            <Button color="error" variant="contained" onClick={() => setConfirmDeleteCandidate(false)}>Delete</Button>
+          </DialogActions>
+        </Dialog>
+      </TabPanel>
       </Paper>
 
       {/* Company Profile Tab */}

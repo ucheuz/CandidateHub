@@ -24,7 +24,8 @@ import {
   PersonAdd,
   Notifications,
   Settings,
-  AccountCircle
+  AccountCircle,
+  ExitToApp
 } from '@mui/icons-material';
 
 const Navbar = () => {
@@ -215,16 +216,12 @@ const Navbar = () => {
             sx: { width: 200, mt: 1 }
           }}
         >
-          <MenuItem onClick={handleProfileMenuClose}>
-            <ListItemIcon><AccountCircle /></ListItemIcon>
-            <ListItemText primary="Profile" />
-          </MenuItem>
-          <MenuItem onClick={handleProfileMenuClose}>
+          <MenuItem onClick={() => { handleProfileMenuClose(); navigate('/settings'); }}>
             <ListItemIcon><Settings /></ListItemIcon>
             <ListItemText primary="Settings" />
           </MenuItem>
-          <Divider />
           <MenuItem onClick={handleProfileMenuClose}>
+            <ListItemIcon><ExitToApp /></ListItemIcon>
             <ListItemText primary="Sign Out" />
           </MenuItem>
         </Menu>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+// ...existing code...
 import { 
   Container, 
   Paper, 
@@ -138,12 +139,15 @@ const CandidateProfile = () => {
 
   // Check if manager rating is missing and show dialog
   useEffect(() => {
-    if (candidate && (!candidate.manager_rating && !candidate.managerRating)) {
+    if (
+      candidate &&
+      candidate.status !== 'Rejected' &&
+      (!candidate.manager_rating && !candidate.managerRating)
+    ) {
       // Show rating dialog after a short delay to allow UI to load
       const timer = setTimeout(() => {
         setRatingDialogOpen(true);
       }, 1000);
-      
       return () => clearTimeout(timer);
     }
   }, [candidate]);
@@ -188,11 +192,9 @@ const CandidateProfile = () => {
       'Interview 1',
       'Interview 2'
     ];
-    
     if (hasInterview3) {
       return [...baseSteps, 'Interview 3', 'Decision'];
     }
-    
     return [...baseSteps, 'Decision'];
   };
 
@@ -206,21 +208,17 @@ const CandidateProfile = () => {
       'Hired': hasInterview3 ? 6 : 5,
       'Rejected': -1
     };
-    
     if (hasInterview3) {
       baseMapping['Interview 3'] = 5;
     }
-    
     return baseMapping;
   };
 
   const getStages = (hasInterview3) => {
     const baseStages = ['NEW', 'Evaluated', 'Phone Screen', 'Interview 1', 'Interview 2'];
-    
     if (hasInterview3) {
       return [...baseStages, 'Interview 3', 'Hired'];
     }
-    
     return [...baseStages, 'Hired'];
   };
 
@@ -274,6 +272,23 @@ const CandidateProfile = () => {
           : `Candidate moved to ${newStage} stage`
       );
       setSnackbarOpen(true);
+
+      // If candidate is hired, update job's dateHired
+      if (newStage === 'Hired' && candidate?.job_id) {
+        try {
+          await fetch(`http://localhost:5000/api/job/${candidate.job_id}/dateHired`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              dateHired: new Date().toISOString()
+            }),
+          });
+        } catch (jobErr) {
+          console.error('Error updating job dateHired:', jobErr);
+        }
+      }
     } catch (err) {
       console.error('Error updating candidate stage:', err);
       setError(err.message);
@@ -800,14 +815,92 @@ const CandidateProfile = () => {
 
       <TabPanel value={activeTab} index={1}>
         <Grid container spacing={3}>
+          {/* Candidate Match Analysis Box - combines all key scores */}
+          <Grid item xs={12} md={4}>
+            <Card sx={{ bgcolor: 'white', boxShadow: 2 }}>
+              <CardContent>
+                <Box display="flex" alignItems="center" mb={2}>
+                  <StarIcon sx={{ mr: 1, color: '#0274B3' }} />
+                  <Typography variant="h6" sx={{ color: '#0274B3' }}>Candidate Match Analysis</Typography>
+                </Box>
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2" sx={{ color: '#0C3F05', mb: 1 }}>
+                    CV Match Score:
+                    <Chip label={`${candidate.cv_match_score || 0}%`} color="primary" sx={{ ml: 1 }} />
+                  </Typography>
+                  <Typography variant="subtitle2" sx={{ color: '#0C3F05', mb: 1 }}>
+                    Manager Rating:
+                    <Rating value={candidate.managerRating || candidate.manager_rating || 0} readOnly sx={{ ml: 1, color: '#0C3F05' }} />
+                  </Typography>
+                  {/* Departmental Skills Average based on all submitted interviewer scorecards */}
+                  <Typography variant="subtitle2" sx={{ color: '#0C3F05', mb: 1 }}>
+                    Departmental Skills Average:
+                    {(() => {
+                      // interviewer_scorecards: [{ type: 'departmental', ratings: [..], submittedBy: 'name' }]
+                      const scorecards = candidate.interviewer_scorecards?.filter(s => s.type === 'departmental' && Array.isArray(s.ratings) && s.ratings.length > 0) || [];
+                      if (scorecards.length === 0) {
+                        return <Chip label="N/A" sx={{ ml: 1, bgcolor: '#e0e0e0', color: '#666' }} />;
+                      }
+                      // Each scorecard: ratings is array of 1-5
+                      const allRatings = scorecards.flatMap(s => s.ratings);
+                      const avg = allRatings.length > 0 ? (allRatings.reduce((a, b) => a + b, 0) / allRatings.length) : 0;
+                      return <Chip label={avg.toFixed(2)} color="primary" sx={{ ml: 1 }} />;
+                    })()}
+                  </Typography>
+                  {/* Core Values Average based on all submitted interviewer scorecards */}
+                  <Typography variant="subtitle2" sx={{ color: '#0C3F05' }}>
+                    IHS Core Values Average:
+                    {(() => {
+                      const scorecards = candidate.interviewer_scorecards?.filter(s => s.type === 'core_values' && Array.isArray(s.ratings) && s.ratings.length > 0) || [];
+                      if (scorecards.length === 0) {
+                        return <Chip label="N/A" sx={{ ml: 1, bgcolor: '#e0e0e0', color: '#666' }} />;
+                      }
+                      const allRatings = scorecards.flatMap(s => s.ratings);
+                      const avg = allRatings.length > 0 ? (allRatings.reduce((a, b) => a + b, 0) / allRatings.length) : 0;
+                      return <Chip label={avg.toFixed(2)} color="primary" sx={{ ml: 1 }} />;
+                    })()}
+                  </Typography>
+                  {/* Combined Average Calculation */}
+                  {(() => {
+                    // Gather all values, normalize to 0-5 scale for ratings, 0-100 for CV match
+                    const cvMatch = typeof candidate.cv_match_score === 'number' ? candidate.cv_match_score : 0;
+                    const managerRating = typeof (candidate.managerRating || candidate.manager_rating) === 'number' ? (candidate.managerRating || candidate.manager_rating) * 20 : 0;
+                    // Use interviewer_scorecards for averages
+                    const deptScorecards = candidate.interviewer_scorecards?.filter(s => s.type === 'departmental' && Array.isArray(s.ratings) && s.ratings.length > 0) || [];
+                    const deptAvg = (() => {
+                      const allRatings = deptScorecards.flatMap(s => s.ratings);
+                      return allRatings.length > 0 ? (allRatings.reduce((a, b) => a + b, 0) / allRatings.length) * 20 : 0;
+                    })();
+                    const coreScorecards = candidate.interviewer_scorecards?.filter(s => s.type === 'core_values' && Array.isArray(s.ratings) && s.ratings.length > 0) || [];
+                    const coreAvg = (() => {
+                      const allRatings = coreScorecards.flatMap(s => s.ratings);
+                      return allRatings.length > 0 ? (allRatings.reduce((a, b) => a + b, 0) / allRatings.length) * 20 : 0;
+                    })();
+                    const values = [cvMatch, managerRating, deptAvg, coreAvg].filter(v => v > 0);
+                    const combinedAvg = values.length > 0 ? (values.reduce((a, b) => a + b, 0) / values.length) : 0;
+                    return (
+                      <Box sx={{ mt: 2, textAlign: 'center' }}>
+                        <Divider sx={{ mb: 2 }} />
+                        <Typography variant="subtitle1" sx={{ color: '#0274B3', fontWeight: 600 }}>
+                          Combined Candidate Match Average:
+                          <Chip label={combinedAvg.toFixed(2) + '%'} color="primary" sx={{ ml: 1 }} />
+                        </Typography>
+                      </Box>
+                    );
+                  })()}
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* CV Match Analysis Box (original) */}
           <Grid item xs={12} md={4}>
             <Card sx={{ bgcolor: 'white', boxShadow: 2 }}>
               <CardContent>
                 <Box display="flex" alignItems="center" mb={2}>
                   <TrendingUpIcon sx={{ mr: 1, color: '#0C3F05' }} />
-                  <Typography variant="h6" sx={{ color: '#343a40' }}>Match Analysis</Typography>
+                  <Typography variant="h6" sx={{ color: '#343a40' }}>CV Match Analysis</Typography>
                 </Box>
-                
                 <Box textAlign="center" mb={3}>
                   <Typography variant="h2" sx={{ 
                     color: getMatchScoreColor(candidate.cv_match_score || 0),
@@ -819,7 +912,6 @@ const CandidateProfile = () => {
                     {getMatchScoreLabel(candidate.cv_match_score || 0)}
                   </Typography>
                 </Box>
-
                 <LinearProgress
                   variant="determinate"
                   value={candidate.cv_match_score || 0}
@@ -1221,52 +1313,80 @@ const CandidateProfile = () => {
             <Grid container spacing={3}>
               <Grid item xs={12} md={6}>
                 <Typography variant="h6" gutterBottom sx={{ color: '#343a40' }}>
-                  Stage History
-                </Typography>
-                <List dense>
+                Stage History
+              </Typography>
+              <List dense>
+                {Array.isArray(candidate.stageHistory) && candidate.stageHistory.length > 0 ? (
+                  candidate.stageHistory.map((entry, idx) => {
+                    let icon, color, desc;
+                    switch (entry.stage) {
+                      case 'Rejected':
+                        icon = <CancelIcon />;
+                        color = 'error.main';
+                        desc = entry.reason || 'Candidate Rejected';
+                        break;
+                      case 'Hired':
+                        icon = <CheckCircleIcon />;
+                        color = 'success.main';
+                        desc = 'Candidate Hired';
+                        break;
+                      case 'Evaluated':
+                        icon = <AssessmentIcon />;
+                        color = 'primary.main';
+                        desc = 'AI Evaluation Completed';
+                        break;
+                      case 'Phone Screen':
+                        icon = <CallIcon />;
+                        color = 'info.main';
+                        desc = 'Phone Screen Completed';
+                        break;
+                      case 'Interview 1':
+                        icon = <WorkIcon />;
+                        color = 'info.main';
+                        desc = 'Interview 1';
+                        break;
+                      case 'Interview 2':
+                        icon = <StarIcon />;
+                        color = 'warning.main';
+                        desc = 'Interview 2';
+                        break;
+                      default:
+                        icon = <PersonIcon />;
+                        color = 'primary.main';
+                        desc = entry.stage;
+                    }
+                    return (
+                      <ListItem key={idx} alignItems="flex-start">
+                        <ListItemIcon>
+                          <Box sx={{ color }}>{icon}</Box>
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={<span style={{ fontWeight: 600 }}>{entry.stage}</span>}
+                          secondary={
+                            <>
+                              <span style={{ color: '#6c757d' }}>{desc}</span>
+                              <br />
+                              <span style={{ color: '#adb5bd', fontSize: 13 }}>{entry.timestamp ? formatFirestoreTimestamp(entry.timestamp) : ''}</span>
+                            </>
+                          }
+                        />
+                      </ListItem>
+                    );
+                  })
+                ) : (
                   <ListItem>
                     <ListItemIcon>
                       <PersonIcon color="primary" />
                     </ListItemIcon>
                     <ListItemText
-                      primary="Application Submitted"
-                      secondary={formatFirestoreTimestamp(candidate.upload_date)}
+                      primary={<span style={{ fontWeight: 600 }}>Application Submitted</span>}
+                      secondary={
+                        <span style={{ color: '#adb5bd', fontSize: 13 }}>{formatFirestoreTimestamp(candidate.upload_date)}</span>
+                      }
                     />
                   </ListItem>
-                  {candidate.status === 'Evaluated' && (
-                    <ListItem>
-                      <ListItemIcon>
-                        <AssessmentIcon color="primary" />
-                      </ListItemIcon>
-                      <ListItemText
-                        primary="AI Evaluation Completed"
-                        secondary="Resume analyzed and scored"
-                      />
-                    </ListItem>
-                  )}
-                  {candidate.status === 'Rejected' && (
-                    <ListItem>
-                      <ListItemIcon>
-                        <CancelIcon color="error" />
-                      </ListItemIcon>
-                      <ListItemText
-                        primary="Candidate Rejected"
-                        secondary="Application was not successful"
-                      />
-                    </ListItem>
-                  )}
-                  {candidate.status === 'Hired' && (
-                    <ListItem>
-                      <ListItemIcon>
-                        <CheckCircleIcon color="success" />
-                      </ListItemIcon>
-                      <ListItemText
-                        primary="Candidate Hired"
-                        secondary="Successfully completed hiring process"
-                      />
-                    </ListItem>
-                  )}
-                </List>
+                )}
+              </List>
               </Grid>
             </Grid>
           </CardContent>

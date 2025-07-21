@@ -4,6 +4,7 @@ import { ThemeProvider, createTheme } from '@mui/material';
 import NavbarNew from './components/NavbarNew';
 import Dashboard from './components/Dashboard';
 import JobList from './components/JobList';
+import BusinessSettings from './components/BusinessSettings';
 import JobForm from './components/JobForm';
 import ResumeUpload from './components/ResumeUpload';
 import Evaluation from './components/Evaluation';
@@ -85,6 +86,7 @@ function App() {
             element={<CandidateProfile />} 
           />
           <Route path="/evaluation/:jobId/:resumeId" element={<Evaluation />} />
+          <Route path="/settings" element={<BusinessSettings />} />
         </Routes>
       </Router>
     </ThemeProvider>

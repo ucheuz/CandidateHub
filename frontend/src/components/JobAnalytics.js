@@ -50,7 +50,16 @@ import {
 } from '@mui/icons-material';
 import { useParams } from 'react-router-dom';
 
-const COLORS = ['#0274B3', '#4FC3F7', '#81C784', '#FFB74D', '#F06292', '#BA68C8', '#FF8A65'];
+// Modern gradient and vibrant colors for pipeline stages
+const PIPELINE_COLORS = [
+  'url(#blueGradient)',
+  'url(#greenGradient)',
+  'url(#orangeGradient)',
+  'url(#pinkGradient)',
+  'url(#purpleGradient)',
+  'url(#tealGradient)',
+  'url(#goldGradient)'
+];
 
 const MetricCard = ({ title, value, change, changeType, icon, color }) => (
   <Card sx={{ height: '100%' }}>
@@ -211,28 +220,73 @@ const JobAnalytics = () => {
       </Grid>
 
       <Grid container spacing={3}>
-        {/* Pipeline Distribution */}
+        {/* Pipeline Distribution - visually enhanced */}
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3, height: 400 }}>
-            <Typography variant="h6" gutterBottom>
+          <Paper sx={{ p: 3, height: 400, background: 'linear-gradient(135deg, #e3f2fd 0%, #fce4ec 100%)', boxShadow: 4, borderRadius: 3 }}>
+            <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', color: '#0274B3', letterSpacing: 1 }}>
               Candidate Pipeline Distribution
             </Typography>
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
+                <defs>
+                  <linearGradient id="blueGradient" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stopColor="#0274B3" />
+                    <stop offset="100%" stopColor="#4FC3F7" />
+                  </linearGradient>
+                  <linearGradient id="greenGradient" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stopColor="#43e97b" />
+                    <stop offset="100%" stopColor="#38f9d7" />
+                  </linearGradient>
+                  <linearGradient id="orangeGradient" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stopColor="#ffb347" />
+                    <stop offset="100%" stopColor="#ffcc80" />
+                  </linearGradient>
+                  <linearGradient id="pinkGradient" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stopColor="#f06292" />
+                    <stop offset="100%" stopColor="#ba68c8" />
+                  </linearGradient>
+                  <linearGradient id="purpleGradient" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stopColor="#7b1fa2" />
+                    <stop offset="100%" stopColor="#9575cd" />
+                  </linearGradient>
+                  <linearGradient id="tealGradient" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stopColor="#26c6da" />
+                    <stop offset="100%" stopColor="#80deea" />
+                  </linearGradient>
+                  <linearGradient id="goldGradient" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stopColor="#ffd700" />
+                    <stop offset="100%" stopColor="#fff9c4" />
+                  </linearGradient>
+                </defs>
                 <Pie
                   data={stageData}
                   cx="50%"
                   cy="50%"
-                  outerRadius={80}
+                  outerRadius={100}
+                  innerRadius={50}
                   dataKey="value"
-                  label={({ name, percentage }) => `${name}: ${percentage}%`}
+                  label={({ name, percentage, value }) => (
+                    <text style={{ fontWeight: 600, fontSize: 14, fill: '#343a40', filter: 'drop-shadow(0 1px 2px #fff)' }}>
+                      {name}: {value} ({percentage}%)
+                    </text>
+                  )}
+                  labelLine={false}
+                  isAnimationActive={true}
                 >
                   {stageData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    <Cell key={`cell-${index}`} fill={PIPELINE_COLORS[index % PIPELINE_COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip />
-                <Legend />
+                <Tooltip
+                  contentStyle={{ background: '#fff', borderRadius: 8, boxShadow: '0 2px 8px #0274B322', color: '#0274B3', fontWeight: 500 }}
+                  itemStyle={{ color: '#0274B3', fontWeight: 600 }}
+                />
+                <Legend
+                  wrapperStyle={{ fontWeight: 600, fontSize: 15, color: '#0274B3', marginTop: 10 }}
+                  iconType="circle"
+                  align="center"
+                  layout="horizontal"
+                />
               </PieChart>
             </ResponsiveContainer>
           </Paper>
@@ -326,8 +380,8 @@ const JobAnalytics = () => {
           </Paper>
         </Grid>
 
-        {/* Skills Analysis */}
-        <Grid item xs={12} md={4}>
+        {/* Skills Analysis - Source of Hire chart hidden for now */}
+        {/* <Grid item xs={12} md={4}>
           <Paper sx={{ p: 3 }}>
             <Typography variant="h6" gutterBottom>
               Skills Demand vs Availability
@@ -357,7 +411,7 @@ const JobAnalytics = () => {
               ))}
             </List>
           </Paper>
-        </Grid>
+        </Grid> */}
 
         {/* Job Performance Summary */}
         <Grid item xs={12}>
