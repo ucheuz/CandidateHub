@@ -749,6 +749,75 @@ def get_candidate(candidate_id):
         return jsonify({"error": "Candidate not found"}), 404
     except Exception as e:
         print(f"Error fetching candidate: {str(e)}")
+
+# === SCORECARD ENDPOINTS ===
+from firebase_admin import firestore
+
+@app.route('/api/candidates/<candidate_id>/scorecard', methods=['POST'])
+def submit_scorecard(candidate_id):
+    """Submit a scorecard for a candidate. Only one per interviewer per type."""
+    try:
+        data = request.json
+        required_fields = ['interviewer', 'type', 'ratings']
+        if not all(f in data for f in required_fields):
+            return jsonify({"error": "Missing required fields"}), 400
+
+        interviewer = data['interviewer']
+        scorecard_type = data['type']  # e.g. 'departmental', 'core_values'
+        ratings = data['ratings']      # dict of {skill/value: score}
+
+        # Check if interviewer already submitted for this type
+        scorecards_ref = db.collection('candidates').document(candidate_id).collection('scorecards')
+        existing = scorecards_ref.where('interviewer', '==', interviewer).where('type', '==', scorecard_type).get()
+        if existing:
+            return jsonify({"error": "Scorecard already submitted by this interviewer for this type"}), 409
+
+        scorecard_doc = {
+            'interviewer': interviewer,
+            'type': scorecard_type,
+            'ratings': ratings,
+            'timestamp': firestore.SERVER_TIMESTAMP
+        }
+        scorecards_ref.add(scorecard_doc)
+        return jsonify({"message": "Scorecard submitted"}), 201
+    except Exception as e:
+        print(f"Error submitting scorecard: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/candidates/<candidate_id>/scorecard/status', methods=['GET'])
+def scorecard_status(candidate_id):
+    """Return which scorecard types have been submitted by which interviewers."""
+    try:
+        scorecards_ref = db.collection('candidates').document(candidate_id).collection('scorecards')
+        scorecards = scorecards_ref.stream()
+        status = defaultdict(list)
+        for doc in scorecards:
+            sc = doc.to_dict()
+            status[sc['type']].append(sc['interviewer'])
+        return jsonify(status), 200
+    except Exception as e:
+        print(f"Error fetching scorecard status: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/candidates/<candidate_id>/scorecard/averages', methods=['GET'])
+def scorecard_averages(candidate_id):
+    """Return weighted averages for each scorecard type and skill/value."""
+    try:
+        scorecards_ref = db.collection('candidates').document(candidate_id).collection('scorecards')
+        scorecards = [doc.to_dict() for doc in scorecards_ref.stream()]
+        # Structure: {type: {skill/value: [scores]}}
+        aggregates = defaultdict(lambda: defaultdict(list))
+        for sc in scorecards:
+            for k, v in sc['ratings'].items():
+                aggregates[sc['type']][k].append(v)
+        # Calculate averages
+        averages = {}
+        for sc_type, ratings in aggregates.items():
+            averages[sc_type] = {k: round(sum(v)/len(v), 2) if v else None for k, v in ratings.items()}
+        return jsonify(averages), 200
+    except Exception as e:
+        print(f"Error calculating scorecard averages: {str(e)}")
+        return jsonify({"error": str(e)}), 500
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/jobs/<job_id>/candidates', methods=['GET'])

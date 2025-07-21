@@ -460,6 +460,104 @@ const CandidateProfile = () => {
     );
   };
 
+  // Scorecard Section Component
+  const ScorecardSection = ({ skills, candidateId, title }) => {
+    const [ratings, setRatings] = useState(Array(skills.length).fill(0));
+    const [submitting, setSubmitting] = useState(false);
+    const [success, setSuccess] = useState(false);
+    const [error, setError] = useState('');
+    const [alreadySubmitted, setAlreadySubmitted] = useState(false);
+
+    useEffect(() => {
+      // Check if interviewer has already submitted this scorecard
+      const fetchScorecardStatus = async () => {
+        try {
+          const response = await fetch(`http://localhost:5000/api/candidates/${candidateId}/scorecard/status?scorecardType=${encodeURIComponent(title)}`);
+          if (response.ok) {
+            const data = await response.json();
+            setAlreadySubmitted(data.alreadySubmitted === true);
+          }
+        } catch (err) {
+          // Ignore error, allow submission if status can't be checked
+        }
+      };
+      fetchScorecardStatus();
+    }, [candidateId, title]);
+
+    const handleRatingChange = (index, value) => {
+      setRatings(prev => prev.map((r, i) => (i === index ? value : r)));
+    };
+
+    const handleSubmit = async () => {
+      setSubmitting(true);
+      setError('');
+      try {
+        // Save ratings to backend (extend as needed)
+        const response = await fetch(`http://localhost:5000/api/candidates/${candidateId}/scorecard`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ratings, skills, scorecardType: title })
+        });
+        if (!response.ok) throw new Error('Failed to submit scorecard');
+        setSuccess(true);
+        setAlreadySubmitted(true);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setSubmitting(false);
+      }
+    };
+
+    return (
+      <Card sx={{ bgcolor: 'white', boxShadow: 2, mt: 3 }}>
+        <CardContent>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+            <AssessmentIcon sx={{ mr: 1, color: '#0C3F05' }} />
+            <Typography variant="h6" sx={{ color: '#0C3F05' }}>{title || "Scorecard"}</Typography>
+          </Box>
+          <Divider sx={{ mb: 2 }} />
+          <Typography variant="body2" sx={{ mb: 2, color: '#6c757d' }}>
+            Rate the candidate on each key value/skill. Your ratings help build a fair, collaborative evaluation.
+          </Typography>
+          <Grid container spacing={2}>
+            {skills.map((skill, idx) => (
+              <Grid item xs={12} md={6} key={skill}>
+                <Paper sx={{ p: 2, mb: 1, border: '1px solid #e9ecef', boxShadow: 0 }}>
+                  <Typography variant="subtitle1" sx={{ mb: 1, color: '#0274B3', fontWeight: 500 }}>{skill}</Typography>
+                  <Rating
+                    name={`scorecard-skill-${title || "scorecard"}-${idx}`}
+                    value={ratings[idx]}
+                    onChange={(_, value) => handleRatingChange(idx, value)}
+                    sx={{ color: '#0C3F05', fontSize: '2rem' }}
+                    disabled={alreadySubmitted}
+                  />
+                </Paper>
+              </Grid>
+            ))}
+          </Grid>
+          <Stack direction="row" spacing={2} sx={{ mt: 3 }}>
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={handleSubmit}
+              disabled={submitting || ratings.some(r => r === 0) || alreadySubmitted}
+              sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 500 }}
+            >
+              {alreadySubmitted ? 'Scorecard Submitted' : 'Submit Scorecard'}
+            </Button>
+            {success && <Chip label="Submitted" color="success" sx={{ fontWeight: 500 }} />}
+          </Stack>
+          {alreadySubmitted && (
+            <Alert severity="info" sx={{ mt: 2 }}>
+              You have already submitted this scorecard.
+            </Alert>
+          )}
+          {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
+        </CardContent>
+      </Card>
+    );
+  };
+
   if (loading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
@@ -651,8 +749,13 @@ const CandidateProfile = () => {
             iconPosition="start"
           />
           <Tab 
+            icon={<StarIcon />} 
+            label="Scorecard" 
+            iconPosition="start"
+          />
+          <Tab 
             icon={<CommentIcon />} 
-            label="Collaborative Notes" 
+            label="Notes" 
             iconPosition="start"
           />
           <Tab 
@@ -742,10 +845,17 @@ const CandidateProfile = () => {
                 {candidate.evaluation ? (
                   <Box>
                     <Typography variant="body1" paragraph sx={{ lineHeight: 1.6 }}>
-                      {candidate.evaluation.summary}
+                      {/* Show only the part after 'Quick Assessment:' */}
+                      {(() => {
+                        const summary = candidate.evaluation.summary || '';
+                        const idx = summary.indexOf('Quick Assessment:');
+                        if (idx !== -1) {
+                          return summary.substring(idx + 'Quick Assessment:'.length).trim();
+                        }
+                        return summary;
+                      })()}
                     </Typography>
-                    
-                    {/* Expandable Detailed Analysis */}
+                    {/* Expandable Detailed Analysis - moved here under AI Evaluation summary */}
                     {candidate.evaluation.detail && (
                       <Box>
                         <Button
@@ -765,7 +875,6 @@ const CandidateProfile = () => {
                         >
                           {showDetailedEvaluation ? 'Show Less' : 'See More Details'}
                         </Button>
-                        
                         <Collapse in={showDetailedEvaluation}>
                           <Box sx={{ 
                             p: 2, 
@@ -777,12 +886,46 @@ const CandidateProfile = () => {
                               Detailed Analysis
                             </Typography>
                             <Typography variant="body1" sx={{ whiteSpace: 'pre-line', lineHeight: 1.6 }}>
-                              {candidate.evaluation.detail}
+                              {(candidate.evaluation.detail || '').replace(/[\#\*]/g, '').replace(/---DETAILED EVALUATION END---/g, '').trim()}
                             </Typography>
                           </Box>
                         </Collapse>
                       </Box>
                     )}
+                    {/* Weighted Averages for Scorecards */}
+                    <Divider sx={{ my: 2 }} />
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="h6" sx={{ color: '#0274B3', mb: 1 }}>
+                        Scorecard Weighted Averages
+                      </Typography>
+                      {/* Departmental Skills Scorecard Average */}
+                      {candidate.departmental_scorecard_avg ? (
+                        <Box sx={{ mb: 1 }}>
+                          <Typography variant="subtitle1" sx={{ color: '#0C3F05' }}>
+                            Departmental Skills Average:
+                            <Chip label={candidate.departmental_scorecard_avg.toFixed(2)} color="primary" sx={{ ml: 1 }} />
+                          </Typography>
+                        </Box>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                          No departmental skills scorecard ratings yet.
+                        </Typography>
+                      )}
+                      {/* Core Values Scorecard Average */}
+                      {candidate.core_values_scorecard_avg ? (
+                        <Box>
+                          <Typography variant="subtitle1" sx={{ color: '#0C3F05' }}>
+                            IHS Core Values Average:
+                            <Chip label={candidate.core_values_scorecard_avg.toFixed(2)} color="primary" sx={{ ml: 1 }} />
+                          </Typography>
+                        </Box>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary">
+                          No core values scorecard ratings yet.
+                        </Typography>
+                      )}
+                    </Box>
+                    
                     
                     {/* Feedback Sentiment Analysis */}
                     <Divider sx={{ my: 2 }} />
@@ -884,7 +1027,30 @@ const CandidateProfile = () => {
         </Grid>
       </TabPanel>
 
+      {/* Scorecard TabPanel - now includes IHS Core Values Scorecard and Departmental Skills Scorecard */}
       <TabPanel value={activeTab} index={2}>
+        {/* IHS Core Values Scorecard - always shown */}
+        <ScorecardSection 
+          skills={["Customer Focus", "Innovation", "Integrity", "Boldness", "Sustainability"]} 
+          candidateId={candidate?.id} 
+          title="IHS Core Values Scorecard"
+        />
+
+        {/* Departmental Skills Scorecard - shown if job has skills */}
+        {job?.departmental_skills && job.departmental_skills.length > 0 ? (
+          <ScorecardSection 
+            skills={job.departmental_skills.filter(Boolean)} 
+            candidateId={candidate?.id} 
+            title="Departmental Skills Scorecard"
+          />
+        ) : (
+          <Alert severity="info" sx={{ mt: 2 }}>
+            No departmental skills configured for this job. Departmental Scorecard is not available.
+          </Alert>
+        )}
+      </TabPanel>
+
+      <TabPanel value={activeTab} index={3}>
         <Card sx={{ bgcolor: 'white', boxShadow: 2 }}>
           <CardContent sx={{ p: 0 }}>
             <Box sx={{ 
@@ -897,7 +1063,7 @@ const CandidateProfile = () => {
             }}>
               <CommentIcon sx={{ mr: 2, color: '#0C3F05' }} />
               <Typography variant="h6" sx={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                Collaborative Notes & Feedback
+                Notes & Feedback
               </Typography>
             </Box>
             <Box sx={{ p: 2 }}>
@@ -907,7 +1073,7 @@ const CandidateProfile = () => {
         </Card>
       </TabPanel>
 
-      <TabPanel value={activeTab} index={3}>
+      <TabPanel value={activeTab} index={4}>
         <Card sx={{ bgcolor: 'white', boxShadow: 2 }}>
           <CardContent>
             <Box sx={{ 
