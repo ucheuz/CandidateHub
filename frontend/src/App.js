@@ -1,5 +1,8 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+
+
+
 import { ThemeProvider, createTheme } from '@mui/material';
 import NavbarNew from './components/NavbarNew';
 import Dashboard from './components/Dashboard';
@@ -11,6 +14,12 @@ import Evaluation from './components/Evaluation';
 import CandidateList from './components/CandidateList';
 import CandidateProfile from './components/CandidateProfile';
 import JobSelection from './components/JobSelection';
+import WelcomeLogin from './components/WelcomeLogin';
+
+// Simple auth check
+const isAuthenticated = () => {
+  return !!localStorage.getItem('candidatehub_auth');
+};
 
 const theme = createTheme({
   palette: {
@@ -72,22 +81,20 @@ function App() {
     <ThemeProvider theme={theme}>
       <Router>
         <NavbarNew />
-        <Routes>
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/jobs" element={<JobList />} />
-          <Route path="/jobs/new" element={<JobForm />} />
-          <Route path="/job-selection" element={<JobSelection />} />
-          <Route path="/upload/:jobId" element={<ResumeUpload />} />
-          <Route path="/job/:jobId/candidates" element={<CandidateList />} />
-          <Route path="/candidates" element={<CandidateList />} />
-          <Route 
-            path="/candidates/:candidateId" 
-            element={<CandidateProfile />} 
-          />
-          <Route path="/evaluation/:jobId/:resumeId" element={<Evaluation />} />
-          <Route path="/settings" element={<BusinessSettings />} />
-        </Routes>
+      <Routes>
+        <Route path="/" element={<WelcomeLogin />} />
+        <Route path="/dashboard" element={isAuthenticated() ? <Dashboard /> : <Navigate to="/" replace />} />
+        <Route path="/jobs" element={isAuthenticated() ? <JobList /> : <Navigate to="/" replace />} />
+        <Route path="/jobs/new" element={isAuthenticated() ? <JobForm /> : <Navigate to="/" replace />} />
+        <Route path="/job-selection" element={isAuthenticated() ? <JobSelection /> : <Navigate to="/" replace />} />
+        <Route path="/upload/:jobId" element={isAuthenticated() ? <ResumeUpload /> : <Navigate to="/" replace />} />
+        <Route path="/job/:jobId/candidates" element={isAuthenticated() ? <CandidateList /> : <Navigate to="/" replace />} />
+        <Route path="/candidates" element={isAuthenticated() ? <CandidateList /> : <Navigate to="/" replace />} />
+        <Route path="/candidate/:candidateId" element={isAuthenticated() ? <CandidateProfile /> : <Navigate to="/" replace />} />
+        <Route path="/candidates/:candidateId" element={isAuthenticated() ? <CandidateProfile /> : <Navigate to="/" replace />} />
+        <Route path="/evaluation/:jobId/:resumeId" element={isAuthenticated() ? <Evaluation /> : <Navigate to="/" replace />} />
+        <Route path="/settings" element={isAuthenticated() ? <BusinessSettings /> : <Navigate to="/" replace />} />
+      </Routes>
       </Router>
     </ThemeProvider>
   );

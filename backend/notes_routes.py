@@ -52,6 +52,7 @@ def create_note(candidate_id):
         # Get the note data
         note_data = request.json
         print(f"Received note data: {note_data}")
+        print(f"DEBUG: interviewer field received: {note_data.get('interviewer')}")
 
         # Validate required fields
         if 'content' not in note_data:

@@ -140,12 +140,17 @@ const NotesHub = ({ candidateId }) => {
     }
 
     console.log('Candidate ID:', candidateId);
+    // Get current user from localStorage
+    let currentUser = null;
+    try {
+      currentUser = JSON.parse(localStorage.getItem('currentUser')) || null;
+    } catch {}
     const noteData = {
       candidateId: candidateId,
       content: newNote,
       interviewer: {
-        name: 'Current User',
-        avatar: null
+        name: currentUser && currentUser.name ? currentUser.name : 'Unknown',
+        avatar: currentUser && currentUser.avatar ? currentUser.avatar : null
       },
       isSaved: shouldSave,
       type: 'candidate_note'
@@ -224,10 +229,14 @@ const NotesHub = ({ candidateId }) => {
   };
 
   const handleTyping = () => {
+    let currentUser = null;
+    try {
+      currentUser = JSON.parse(localStorage.getItem('currentUser')) || null;
+    } catch {}
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({
         type: 'typing',
-        interviewer: 'Current User'
+        interviewer: currentUser && currentUser.name ? currentUser.name : 'Unknown'
       }));
     }
   };
@@ -266,8 +275,12 @@ const NotesHub = ({ candidateId }) => {
         }}
       >
         {notes.map((note, index) => {
-          const isCurrentUser = note.interviewer.name === 'Current User';
-          
+          // Get current user from localStorage
+          let currentUser = null;
+          try {
+            currentUser = JSON.parse(localStorage.getItem('currentUser')) || null;
+          } catch {}
+          const isMe = currentUser && note.interviewer.name === currentUser.name;
           return (
             <Box 
               key={index}
@@ -275,8 +288,8 @@ const NotesHub = ({ candidateId }) => {
                 display: 'flex',
                 gap: 1,
                 alignItems: 'flex-start',
-                flexDirection: isCurrentUser ? 'row-reverse' : 'row',
-                justifyContent: isCurrentUser ? 'flex-end' : 'flex-start'
+                flexDirection: isMe ? 'row-reverse' : 'row',
+                justifyContent: isMe ? 'flex-end' : 'flex-start'
               }}
             >
               <Avatar src={note.interviewer.avatar}>
@@ -287,20 +300,20 @@ const NotesHub = ({ candidateId }) => {
                   variant="subtitle2" 
                   sx={{ 
                     fontWeight: 'bold',
-                    textAlign: isCurrentUser ? 'right' : 'left'
+                    textAlign: isMe ? 'right' : 'left'
                   }}
                 >
-                  {isCurrentUser ? 'You' : note.interviewer.name}
+                  {isMe ? `${currentUser.name} (ME)` : note.interviewer.name}
                 </Typography>
                 <Paper 
                   elevation={1}
                   sx={{ 
                     p: 1.5,
-                    bgcolor: isCurrentUser 
+                    bgcolor: isMe 
                       ? (note.isSaved ? '#0C3F05' : '#1976d2') 
                       : (note.isSaved ? 'primary.light' : 'grey.100'),
-                    color: isCurrentUser ? 'white' : 'inherit',
-                    borderRadius: isCurrentUser ? '18px 18px 4px 18px' : '18px 18px 18px 4px'
+                    color: isMe ? 'white' : 'inherit',
+                    borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px'
                   }}
                 >
                   <Typography variant="body1">
@@ -312,7 +325,7 @@ const NotesHub = ({ candidateId }) => {
                   color="text.secondary"
                   sx={{ 
                     display: 'block',
-                    textAlign: isCurrentUser ? 'right' : 'left'
+                    textAlign: isMe ? 'right' : 'left'
                   }}
                 >
                   {new Date(note.timestamp).toLocaleTimeString()}

@@ -43,6 +43,15 @@ const JobForm = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  // Get current user from localStorage
+  const currentUser = (() => {
+    try {
+      return JSON.parse(localStorage.getItem('currentUser')) || null;
+    } catch {
+      return null;
+    }
+  })();
+
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -50,7 +59,7 @@ const JobForm = () => {
     departmental_skills: ['', '', '', '', ''], // 5 key skills for scorecards
     location: '',
     type: '',
-    listedBy: 'Current User',
+    listedBy: currentUser?.name || '',
     hiringManagers: '',
     datePosted: null,
     dateHired: null,
@@ -130,7 +139,7 @@ const JobForm = () => {
         departmental_skills: formData.departmental_skills.filter(skill => skill.trim()).map(skill => skill.trim()),
         location: formData.location.trim(),
         type: formData.type.trim(),
-        listedBy: formData.listedBy.trim(),
+        listedBy: currentUser?.name || formData.listedBy.trim(),
         hiringManagers: formData.hiringManagers.split(',').map(manager => manager.trim()).filter(Boolean),
         datePosted: serverDate,
         dateHired: null,

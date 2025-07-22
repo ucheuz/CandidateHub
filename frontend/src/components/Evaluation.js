@@ -392,7 +392,7 @@ const Evaluation = () => {
                           borderRadius: 1
                         }}
                       >
-                        {evaluation.detail}
+                        {(evaluation.detail || '').replace(/[\*#]/g, '').replace(/---DETAILED EVALUATION END---/g, '')}
                       </Typography>
                     </Box>
                   )}

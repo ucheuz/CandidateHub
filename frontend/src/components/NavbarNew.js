@@ -59,6 +59,9 @@ const Navbar = () => {
     { path: '/job-selection', label: 'Add Candidate', icon: <PersonAdd /> },
   ];
 
+  // Auth check
+  const isAuthenticated = !!localStorage.getItem('candidatehub_auth');
+
   return (
     <AppBar position="static" sx={{ backgroundColor: '#0C3F05', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
       <Toolbar sx={{ minHeight: '70px' }}>
@@ -82,11 +85,12 @@ const Navbar = () => {
               component="div" 
               sx={{ 
                 fontWeight: 'bold',
-                cursor: 'pointer',
+                cursor: isAuthenticated ? 'pointer' : 'default',
                 color: 'white',
-                fontFamily: 'Helvetica, Arial, sans-serif'
+                fontFamily: 'Helvetica, Arial, sans-serif',
+                opacity: isAuthenticated ? 1 : 0.7
               }}
-              onClick={() => navigate('/dashboard')}
+              onClick={isAuthenticated ? () => navigate('/dashboard') : undefined}
             >
               CandidateHub
             </Typography>
@@ -95,63 +99,67 @@ const Navbar = () => {
         
         {/* Desktop Navigation */}
         <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 1, mr: 2 }}>
-            {navigationItems.map((item) => (
-              <Button
-                key={item.path}
-                color="inherit"
-                component={Link}
-                to={item.path}
-                startIcon={item.icon}
-                sx={{
-                  backgroundColor: isActive(item.path) ? 'rgba(255,255,255,0.15)' : 'transparent',
-                  color: 'white',
-                  borderRadius: 2,
-                  px: 2,
-                  py: 1,
-                  fontFamily: 'Helvetica, Arial, sans-serif',
-                  '&:hover': { 
-                    backgroundColor: isActive(item.path) ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)',
-                    transform: 'translateY(-1px)'
-                  },
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                {item.label}
-              </Button>
-            ))}
-          </Box>
-
-        {/* Notifications and Profile */}
-        <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 1, alignItems: 'center' }}>
-          <IconButton 
-            color="inherit" 
-            sx={{ 
-              '&:hover': { 
-                backgroundColor: 'rgba(255,255,255,0.1)',
-                transform: 'scale(1.05)'
-              }
-            }}
-          >
-            <Badge badgeContent={3} color="error">
-              <Notifications />
-            </Badge>
-          </IconButton>
-          
-          <IconButton
-            onClick={handleProfileMenuOpen}
-            color="inherit"
-            sx={{ 
-              ml: 1,
-              '&:hover': { 
-                backgroundColor: 'rgba(255,255,255,0.1)',
-              }
-            }}
-          >
-            <Avatar sx={{ width: 32, height: 32, bgcolor: 'rgba(255,255,255,0.2)' }}>
-              <AccountCircle />
-            </Avatar>
-          </IconButton>
+          {navigationItems.map((item) => (
+            <Button
+              key={item.path}
+              color="inherit"
+              component={isAuthenticated ? Link : 'button'}
+              to={isAuthenticated ? item.path : undefined}
+              startIcon={item.icon}
+              disabled={!isAuthenticated}
+              sx={{
+                backgroundColor: isActive(item.path) ? 'rgba(255,255,255,0.15)' : 'transparent',
+                color: 'white',
+                borderRadius: 2,
+                px: 2,
+                py: 1,
+                fontFamily: 'Helvetica, Arial, sans-serif',
+                opacity: isAuthenticated ? 1 : 0.5,
+                cursor: isAuthenticated ? 'pointer' : 'not-allowed',
+                '&:hover': { 
+                  backgroundColor: isAuthenticated ? (isActive(item.path) ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)') : 'transparent',
+                  transform: isAuthenticated ? 'translateY(-1px)' : 'none'
+                },
+                transition: 'all 0.2s ease'
+              }}
+            >
+              {item.label}
+            </Button>
+          ))}
         </Box>
+
+        {/* Notifications and Profile (only if authenticated) */}
+        {isAuthenticated && (
+          <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 1, alignItems: 'center' }}>
+            <IconButton 
+              color="inherit" 
+              sx={{ 
+                '&:hover': { 
+                  backgroundColor: 'rgba(255,255,255,0.1)',
+                  transform: 'scale(1.05)'
+                }
+              }}
+            >
+              <Badge badgeContent={3} color="error">
+                <Notifications />
+              </Badge>
+            </IconButton>
+            <IconButton
+              onClick={handleProfileMenuOpen}
+              color="inherit"
+              sx={{ 
+                ml: 1,
+                '&:hover': { 
+                  backgroundColor: 'rgba(255,255,255,0.1)',
+                }
+              }}
+            >
+              <Avatar sx={{ width: 32, height: 32, bgcolor: 'rgba(255,255,255,0.2)' }}>
+                <AccountCircle />
+              </Avatar>
+            </IconButton>
+          </Box>
+        )}
 
         {/* Mobile Navigation Button */}
         <Box sx={{ display: { xs: 'flex', md: 'none' } }}>
@@ -184,12 +192,17 @@ const Navbar = () => {
             <MenuItem 
               key={item.path}
               onClick={() => {
-                handleMenuClose();
-                navigate(item.path);
+                if (isAuthenticated) {
+                  handleMenuClose();
+                  navigate(item.path);
+                }
               }}
+              disabled={!isAuthenticated}
               sx={{
                 py: 1.5,
-                backgroundColor: isActive(item.path) ? 'action.selected' : 'transparent'
+                backgroundColor: isActive(item.path) ? 'action.selected' : 'transparent',
+                opacity: isAuthenticated ? 1 : 0.5,
+                cursor: isAuthenticated ? 'pointer' : 'not-allowed'
               }}
             >
               <ListItemIcon>{item.icon}</ListItemIcon>
@@ -207,24 +220,30 @@ const Navbar = () => {
           </MenuItem>
         </Menu>
 
-        {/* Profile Menu */}
-        <Menu
-          anchorEl={profileMenuAnchor}
-          open={Boolean(profileMenuAnchor)}
-          onClose={handleProfileMenuClose}
-          PaperProps={{
-            sx: { width: 200, mt: 1 }
-          }}
-        >
-          <MenuItem onClick={() => { handleProfileMenuClose(); navigate('/settings'); }}>
-            <ListItemIcon><Settings /></ListItemIcon>
-            <ListItemText primary="Settings" />
-          </MenuItem>
-          <MenuItem onClick={handleProfileMenuClose}>
-            <ListItemIcon><ExitToApp /></ListItemIcon>
-            <ListItemText primary="Sign Out" />
-          </MenuItem>
-        </Menu>
+        {/* Profile Menu (only if authenticated) */}
+        {isAuthenticated && (
+          <Menu
+            anchorEl={profileMenuAnchor}
+            open={Boolean(profileMenuAnchor)}
+            onClose={handleProfileMenuClose}
+            PaperProps={{
+              sx: { width: 200, mt: 1 }
+            }}
+          >
+            <MenuItem onClick={() => { handleProfileMenuClose(); navigate('/settings'); }}>
+              <ListItemIcon><Settings /></ListItemIcon>
+              <ListItemText primary="Settings" />
+            </MenuItem>
+            <MenuItem onClick={() => {
+              localStorage.removeItem('candidatehub_auth');
+              handleProfileMenuClose();
+              navigate('/');
+            }}>
+              <ListItemIcon><ExitToApp /></ListItemIcon>
+              <ListItemText primary="Sign Out" />
+            </MenuItem>
+          </Menu>
+        )}
       </Toolbar>
     </AppBar>
   );

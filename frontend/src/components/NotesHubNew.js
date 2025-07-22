@@ -210,12 +210,18 @@ const NotesHub = ({ candidateId, onNoteSaved }) => {
     
     // Generate a temporary ID for tracking
     const tempId = Date.now().toString();
+    // Get current user from localStorage
+    let currentUser = null;
+    try {
+      currentUser = JSON.parse(localStorage.getItem('currentUser')) || null;
+    } catch {}
+    console.log('DEBUG currentUser:', currentUser);
     const noteData = {
       candidateId: candidateId,
       content: newNote,
       interviewer: {
-        name: 'Current User',
-        avatar: null
+        name: currentUser && typeof currentUser.name === 'string' ? currentUser.name : 'Unknown',
+        avatar: currentUser && currentUser.avatar ? currentUser.avatar : null
       },
       isSaved: shouldSave,
       timestamp: new Date().toISOString(),
@@ -223,20 +229,6 @@ const NotesHub = ({ candidateId, onNoteSaved }) => {
     };
 
     try {
-      // Generate a temporary ID for tracking
-      const tempId = Date.now().toString();
-      const noteData = {
-        candidateId: candidateId,
-        content: newNote,
-        interviewer: {
-          name: 'Current User',
-          avatar: null
-        },
-        isSaved: shouldSave,
-        timestamp: new Date().toISOString(),
-        tempId: tempId
-      };
-
       // Add note to local state immediately for responsiveness
       const messageWithType = { ...noteData, messageType: shouldSave ? 'feedback' : 'note' };
       setAllMessages(prev => [...prev, messageWithType]);
@@ -297,7 +289,7 @@ const NotesHub = ({ candidateId, onNoteSaved }) => {
           
           // Trigger sentiment analysis callback only for saved feedback notes
           if (shouldSave && onNoteSaved && typeof onNoteSaved === 'function') {
-            onNoteSaved();
+            onNoteSaved(savedNote);
           }
         } catch (e) {
           console.error('Error parsing success response:', e);
@@ -322,10 +314,14 @@ const NotesHub = ({ candidateId, onNoteSaved }) => {
   };
 
   const handleTyping = () => {
+    let currentUser = null;
+    try {
+      currentUser = JSON.parse(localStorage.getItem('currentUser')) || null;
+    } catch {}
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({
         type: 'typing',
-        interviewer: 'Current User'
+        interviewer: currentUser && currentUser.name ? currentUser.name : 'Unknown'
       }));
     }
   };
@@ -413,59 +409,67 @@ const NotesHub = ({ candidateId, onNoteSaved }) => {
           </Box>
         ) : (
           <Stack spacing={2}>
-            {allMessages.map((message, index) => (
-              <Box key={index} sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
-                <Avatar 
+        {allMessages.map((message, index) => {
+          // Get current user from localStorage
+          let currentUser = null;
+          try {
+            currentUser = JSON.parse(localStorage.getItem('currentUser')) || null;
+          } catch {}
+          const isMe = currentUser && message.interviewer.name === currentUser.name;
+          return (
+            <Box key={index} sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+              <Avatar 
+                sx={{ 
+                  bgcolor: message.isSaved ? '#0C3F05' : '#6c757d',
+                  width: 40, 
+                  height: 40,
+                  fontSize: '14px'
+                }}
+              >
+                {message.interviewer.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+              </Avatar>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Box display="flex" alignItems="center" gap={1} mb={0.5}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: '#343a40' }}>
+                    {isMe ? `${currentUser.name} (ME)` : message.interviewer.name}
+                  </Typography>
+                  <TimeIcon sx={{ fontSize: 12, color: '#6c757d' }} />
+                  <Typography variant="caption" sx={{ color: '#6c757d' }}>
+                    {new Date(message.timestamp?.seconds ? message.timestamp.seconds * 1000 : message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </Typography>
+                  {message.isSaved && (
+                    <Chip 
+                      label="Saved Feedback" 
+                      size="small" 
+                      color="success"
+                      variant="outlined"
+                      sx={{ fontSize: '10px', height: '18px' }}
+                    />
+                  )}
+                </Box>
+                <Card 
+                  elevation={1}
                   sx={{ 
-                    bgcolor: message.isSaved ? '#0C3F05' : '#6c757d',
-                    width: 40, 
-                    height: 40,
-                    fontSize: '14px'
+                    bgcolor: message.isSaved ? '#e8f5e8' : 'white',
+                    border: message.isSaved ? '1px solid #0C3F05' : '1px solid #e9ecef',
+                    borderRadius: 2,
+                    maxWidth: '85%'
                   }}
                 >
-                  {message.interviewer.name.split(' ').map(n => n[0]).join('').toUpperCase()}
-                </Avatar>
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Box display="flex" alignItems="center" gap={1} mb={0.5}>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: '#343a40' }}>
-                      {message.interviewer.name}
+                  <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                    <Typography variant="body1" sx={{ 
+                      color: '#343a40', 
+                      lineHeight: 1.5,
+                      wordBreak: 'break-word'
+                    }}>
+                      {message.content}
                     </Typography>
-                    <TimeIcon sx={{ fontSize: 12, color: '#6c757d' }} />
-                    <Typography variant="caption" sx={{ color: '#6c757d' }}>
-                      {new Date(message.timestamp?.seconds ? message.timestamp.seconds * 1000 : message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </Typography>
-                    {message.isSaved && (
-                      <Chip 
-                        label="Saved Feedback" 
-                        size="small" 
-                        color="success"
-                        variant="outlined"
-                        sx={{ fontSize: '10px', height: '18px' }}
-                      />
-                    )}
-                  </Box>
-                  <Card 
-                    elevation={1}
-                    sx={{ 
-                      bgcolor: message.isSaved ? '#e8f5e8' : 'white',
-                      border: message.isSaved ? '1px solid #0C3F05' : '1px solid #e9ecef',
-                      borderRadius: 2,
-                      maxWidth: '85%'
-                    }}
-                  >
-                    <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                      <Typography variant="body1" sx={{ 
-                        color: '#343a40', 
-                        lineHeight: 1.5,
-                        wordBreak: 'break-word'
-                      }}>
-                        {message.content}
-                      </Typography>
-                    </CardContent>
-                  </Card>
-                </Box>
+                  </CardContent>
+                </Card>
               </Box>
-            ))}
+            </Box>
+          );
+        })}
             {isTyping && (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 7 }}>
                 <Box sx={{ 
@@ -499,7 +503,13 @@ const NotesHub = ({ candidateId, onNoteSaved }) => {
                   }} />
                 </Box>
                 <Typography variant="caption" sx={{ color: '#6c757d' }}>
-                  Someone is typing...
+                  {(() => {
+                    let currentUser = null;
+                    try {
+                      currentUser = JSON.parse(localStorage.getItem('currentUser')) || null;
+                    } catch {}
+                    return currentUser && currentUser.name ? `${currentUser.name} is typing...` : 'Someone is typing...';
+                  })()}
                 </Typography>
               </Box>
             )}
