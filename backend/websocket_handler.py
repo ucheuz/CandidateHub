@@ -51,13 +51,15 @@ def init_websocket(app: Flask):
                         
                         # Broadcast messages to other clients
                         if candidate_id and candidate_id in connections:
-                            for conn in connections[candidate_id]:
-                                if conn != ws and conn in last_activity:  # Only send to active connections
+                            # Create a copy of the set to iterate over, as it might be modified
+                            for conn in list(connections[candidate_id]):
+                                if conn != ws:
                                     try:
                                         conn.send(data)
                                     except Exception as e:
                                         print(f"Error sending to client: {e}")
-                                        # Remove stale connection
+                                        # Clean up stale connection completely
+                                        connections[candidate_id].discard(conn)
                                         if conn in last_activity:
                                             del last_activity[conn]
 
@@ -75,7 +77,7 @@ def init_websocket(app: Flask):
             print(f"Cleaning up connection for candidate: {candidate_id}")
             # Clean up connection
             if candidate_id and candidate_id in connections:
-                connections[candidate_id].remove(ws)
+                connections[candidate_id].discard(ws)
                 if not connections[candidate_id]:
                     del connections[candidate_id]
             if ws in last_activity:

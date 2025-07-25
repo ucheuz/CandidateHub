@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   AppBar, 
   Toolbar, 
@@ -27,12 +27,60 @@ import {
   AccountCircle,
   ExitToApp
 } from '@mui/icons-material';
+import { useIsAuthenticated, useMsal } from '@azure/msal-react';
+import { collection, onSnapshot, query, where, doc, updateDoc, orderBy } from 'firebase/firestore';
+import { db } from '../firebase';
 
 const Navbar = () => {
   const [menuAnchor, setMenuAnchor] = useState(null);
   const [profileMenuAnchor, setProfileMenuAnchor] = useState(null);
+  const [notificationsMenuAnchor, setNotificationsMenuAnchor] = useState(null);
+  const [notifications, setNotifications] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
   const location = useLocation();
   const navigate = useNavigate();
+  const isAuthenticated = useIsAuthenticated();
+  const { instance, accounts } = useMsal();
+
+  // Get user from localStorage to find their ID for notifications
+  useEffect(() => {
+    if (isAuthenticated) {
+      try {
+        const user = JSON.parse(localStorage.getItem('currentUser'));
+        if (user) {
+          setCurrentUser(user);
+        }
+      } catch (e) {
+        console.error("Could not parse currentUser from localStorage", e);
+      }
+    } else {
+      setCurrentUser(null);
+    }
+  }, [isAuthenticated]);
+
+  // Set up notifications listener
+  useEffect(() => {
+    if (isAuthenticated && currentUser?.id) {
+      const notificationsQuery = query(
+        collection(db, 'users', currentUser.id, 'notifications'),
+        where('read', '==', false),
+        orderBy('timestamp', 'desc')
+      );
+
+      const unsubscribe = onSnapshot(notificationsQuery, (snapshot) => {
+        const fetchedNotifications = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setNotifications(fetchedNotifications);
+      }, (error) => {
+        console.error("Error fetching notifications:", error);
+      });
+
+      // Cleanup listener on unmount
+      return () => unsubscribe();
+    }
+  }, [isAuthenticated, currentUser]);
 
   const handleMenuClick = (event) => {
     setMenuAnchor(event.currentTarget);
@@ -50,6 +98,35 @@ const Navbar = () => {
     setProfileMenuAnchor(null);
   };
 
+  const handleNotificationsMenuOpen = (event) => {
+    setNotificationsMenuAnchor(event.currentTarget);
+  };
+
+  const handleNotificationsMenuClose = () => {
+    setNotificationsMenuAnchor(null);
+  };
+
+  const handleLogout = () => {
+    handleProfileMenuClose();
+    // Clear any local storage items you've set manually for a clean state
+    localStorage.removeItem('currentUser');
+    localStorage.removeItem('candidatehub_auth');
+    // Use MSAL's logout to properly sign out the user
+    instance.logoutRedirect({ postLogoutRedirectUri: "/" });
+  };
+
+  const handleNotificationClick = async (notification) => {
+    // Mark as read in Firestore
+    const notificationRef = doc(db, 'users', currentUser.id, 'notifications', notification.id);
+    await updateDoc(notificationRef, { read: true });
+
+    // Navigate to the relevant link
+    if (notification.link) {
+      navigate(notification.link);
+    }
+    handleNotificationsMenuClose();
+  };
+
   const isActive = (path) => location.pathname === path || location.pathname.startsWith(path);
 
   const navigationItems = [
@@ -58,9 +135,6 @@ const Navbar = () => {
     { path: '/candidates', label: 'Candidates', icon: <People /> },
     { path: '/job-selection', label: 'Add Candidate', icon: <PersonAdd /> },
   ];
-
-  // Auth check
-  const isAuthenticated = !!localStorage.getItem('candidatehub_auth');
 
   return (
     <AppBar position="static" sx={{ backgroundColor: '#0C3F05', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
@@ -132,7 +206,8 @@ const Navbar = () => {
         {isAuthenticated && (
           <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 1, alignItems: 'center' }}>
             <IconButton 
-              color="inherit" 
+              color="inherit"
+              onClick={handleNotificationsMenuOpen}
               sx={{ 
                 '&:hover': { 
                   backgroundColor: 'rgba(255,255,255,0.1)',
@@ -140,7 +215,7 @@ const Navbar = () => {
                 }
               }}
             >
-              <Badge badgeContent={3} color="error">
+              <Badge badgeContent={notifications.length} color="error">
                 <Notifications />
               </Badge>
             </IconButton>
@@ -154,8 +229,11 @@ const Navbar = () => {
                 }
               }}
             >
-              <Avatar sx={{ width: 32, height: 32, bgcolor: 'rgba(255,255,255,0.2)' }}>
-                <AccountCircle />
+              <Avatar sx={{ width: 32, height: 32, bgcolor: 'rgba(255,255,255,0.2)', fontSize: '0.875rem' }}>
+                {isAuthenticated && accounts.length > 0 && accounts[0]?.name ? 
+                  accounts[0].name.split(' ').map(n => n[0]).join('').toUpperCase() : 
+                  <AccountCircle />
+                }
               </Avatar>
             </IconButton>
           </Box>
@@ -222,27 +300,50 @@ const Navbar = () => {
 
         {/* Profile Menu (only if authenticated) */}
         {isAuthenticated && (
-          <Menu
-            anchorEl={profileMenuAnchor}
-            open={Boolean(profileMenuAnchor)}
-            onClose={handleProfileMenuClose}
-            PaperProps={{
-              sx: { width: 200, mt: 1 }
-            }}
-          >
-            <MenuItem onClick={() => { handleProfileMenuClose(); navigate('/settings'); }}>
-              <ListItemIcon><Settings /></ListItemIcon>
-              <ListItemText primary="Settings" />
-            </MenuItem>
-            <MenuItem onClick={() => {
-              localStorage.removeItem('candidatehub_auth');
-              handleProfileMenuClose();
-              navigate('/');
-            }}>
-              <ListItemIcon><ExitToApp /></ListItemIcon>
-              <ListItemText primary="Sign Out" />
-            </MenuItem>
-          </Menu>
+          <>
+            <Menu
+              anchorEl={notificationsMenuAnchor}
+              open={Boolean(notificationsMenuAnchor)}
+              onClose={handleNotificationsMenuClose}
+              PaperProps={{
+                sx: { width: 360, mt: 1, maxHeight: 400 }
+              }}
+            >
+              <Typography variant="h6" sx={{ px: 2, py: 1 }}>Notifications</Typography>
+              <Divider />
+              {notifications.length > 0 ? (
+                notifications.map(notification => (
+                  <MenuItem key={notification.id} onClick={() => handleNotificationClick(notification)}>
+                    <ListItemText
+                      primary={notification.title}
+                      secondary={notification.message}
+                    />
+                  </MenuItem>
+                ))
+              ) : (
+                <MenuItem disabled>
+                  <ListItemText primary="No new notifications" />
+                </MenuItem>
+              )}
+            </Menu>
+            <Menu
+              anchorEl={profileMenuAnchor}
+              open={Boolean(profileMenuAnchor)}
+              onClose={handleProfileMenuClose}
+              PaperProps={{
+                sx: { width: 200, mt: 1 }
+              }}
+            >
+              <MenuItem onClick={() => { handleProfileMenuClose(); navigate('/settings'); }}>
+                <ListItemIcon><Settings /></ListItemIcon>
+                <ListItemText primary="Settings" />
+              </MenuItem>
+              <MenuItem onClick={handleLogout}>
+                <ListItemIcon><ExitToApp /></ListItemIcon>
+                <ListItemText primary="Sign Out" />
+              </MenuItem>
+            </Menu>
+          </>
         )}
       </Toolbar>
     </AppBar>

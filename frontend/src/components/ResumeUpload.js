@@ -18,11 +18,11 @@ import {
 import { useParams, useNavigate } from 'react-router-dom';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
+import axiosInstance from '../api/axiosInstance';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import DeleteIcon from '@mui/icons-material/Delete';
 import WorkIcon from '@mui/icons-material/Work';
-import axios from 'axios';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
@@ -137,11 +137,7 @@ const ResumeUpload = () => {
 
     try {
       console.log('Uploading file:', file.name, 'Size:', file.size, 'Type:', file.type);
-      const response = await axios.post('http://localhost:5000/api/resume/upload', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      });
+      const response = await axiosInstance.post('/api/resume/upload', formData);
 
       if (response.status === 201) {
         const { id: resumeId } = response.data;

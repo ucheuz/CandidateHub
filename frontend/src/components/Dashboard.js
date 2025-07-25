@@ -44,6 +44,7 @@ import {
   Cancel
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import axiosInstance from '../api/axiosInstance';
 
 const COLORS = ['#0274B3', '#4FC3F7', '#81C784', '#FFB74D', '#F06292', '#BA68C8'];
 
@@ -116,10 +117,9 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchAnalytics = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/analytics/dashboard');
-        if (!response.ok) throw new Error('Failed to fetch analytics');
-        const data = await response.json();
-        setAnalytics(data);
+        // Use the axios instance which automatically handles the auth token
+        const response = await axiosInstance.get('/api/analytics/dashboard');
+        setAnalytics(response.data);
       } catch (err) {
         setError(err.message);
       } finally {

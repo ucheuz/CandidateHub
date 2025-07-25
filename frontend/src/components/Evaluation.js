@@ -29,7 +29,7 @@ import ErrorIcon from '@mui/icons-material/Error';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import LaunchIcon from '@mui/icons-material/Launch';
 import WorkIcon from '@mui/icons-material/Work';
-import axios from 'axios';
+import axiosInstance from '../api/axiosInstance';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
@@ -88,7 +88,7 @@ const Evaluation = () => {
 
     const fetchEvaluation = async () => {
       try {
-        const response = await axios.get(`http://localhost:5000/api/evaluate/${jobId}/${resumeId}`);
+        const response = await axiosInstance.get(`/api/evaluate/${jobId}/${resumeId}`);
         setEvaluation({
           summary: response.data.summary,
           detail: response.data.detail

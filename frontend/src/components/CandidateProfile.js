@@ -64,7 +64,8 @@ import {
 import { useParams } from 'react-router-dom';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
-import NotesHub from './NotesHubNew';
+import NotesHub from './NotesHub';
+import axiosInstance from '../api/axiosInstance';
 
 dayjs.extend(relativeTime);
 
@@ -104,19 +105,19 @@ const CandidateProfile = () => {
     const fetchCandidate = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`http://localhost:5000/api/candidates/${candidateId}`);
-        if (!response.ok) {
+        const response = await axiosInstance.get(`/api/candidates/${candidateId}`);
+        if (response.status !== 200) {
           throw new Error('Failed to fetch candidate data');
         }
-        const data = await response.json();
+        const data = response.data;
         setCandidate(data);
         
         // Fetch job information if candidate has a job_id
         if (data.job_id) {
           try {
-            const jobResponse = await fetch(`http://localhost:5000/api/job/${data.job_id}`);
-            if (jobResponse.ok) {
-              const jobData = await jobResponse.json();
+            const jobResponse = await axiosInstance.get(`/api/job/${data.job_id}`);
+            if (jobResponse.status === 200) {
+              const jobData = jobResponse.data;
               setJob(jobData);
             }
           } catch (jobError) {
@@ -249,22 +250,15 @@ const CandidateProfile = () => {
   const updateCandidateStage = async (newStage, rejectionReason = null) => {
     setUpdating(true);
     try {
-      const response = await fetch(`http://localhost:5000/api/candidates/${candidateId}/stage`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          stage: newStage,
-          rejectionReason: rejectionReason
-        }),
+      const response = await axiosInstance.put(`/api/candidates/${candidateId}/stage`, {
+        stage: newStage,
+        rejectionReason: rejectionReason
       });
 
-      if (!response.ok) {
+      if (response.status !== 200) {
         throw new Error('Failed to update candidate stage');
       }
 
-      const updatedCandidate = await response.json();
       setCandidate(prev => ({ ...prev, status: newStage }));
       setSnackbarMessage(
         newStage === 'Rejected' 
@@ -276,14 +270,8 @@ const CandidateProfile = () => {
       // If candidate is hired, update job's dateHired
       if (newStage === 'Hired' && candidate?.job_id) {
         try {
-          await fetch(`http://localhost:5000/api/job/${candidate.job_id}/dateHired`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              dateHired: new Date().toISOString()
-            }),
+          await axiosInstance.put(`/api/job/${candidate.job_id}/dateHired`, {
+            dateHired: new Date().toISOString()
           });
         } catch (jobErr) {
           console.error('Error updating job dateHired:', jobErr);
@@ -361,20 +349,14 @@ const CandidateProfile = () => {
 
     setUpdating(true);
     try {
-      const response = await fetch(`http://localhost:5000/api/candidates/${candidateId}/rating`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          rating: pendingRating,
-          comment: ratingComment.trim() || null,
-          ratedBy: 'Current User',
-          ratedAt: new Date().toISOString()
-        }),
+      const response = await axiosInstance.put(`/api/candidates/${candidateId}/rating`, {
+        rating: pendingRating,
+        comment: ratingComment.trim() || null,
+        ratedBy: 'Current User',
+        ratedAt: new Date().toISOString()
       });
 
-      if (!response.ok) {
+      if (response.status !== 200) {
         throw new Error('Failed to update candidate rating');
       }
 
@@ -417,18 +399,12 @@ const CandidateProfile = () => {
   const handleAnalyzeSentiment = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:5000/api/candidates/${candidateId}/sentiment-analysis`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await axiosInstance.post(`/api/candidates/${candidateId}/sentiment-analysis`);
       
-      if (!response.ok) {
+      if (response.status !== 200) {
         throw new Error('Failed to analyze sentiment');
       }
-      
-      const sentimentData = await response.json();
+      const sentimentData = response.data;
       
       // Update candidate state with new sentiment data
       setCandidate(prev => ({
@@ -487,9 +463,9 @@ const CandidateProfile = () => {
       // Check if interviewer has already submitted this scorecard
       const fetchScorecardStatus = async () => {
         try {
-          const response = await fetch(`http://localhost:5000/api/candidates/${candidateId}/scorecard/status?scorecardType=${encodeURIComponent(title)}`);
-          if (response.ok) {
-            const data = await response.json();
+          const response = await axiosInstance.get(`/api/candidates/${candidateId}/scorecard/status?scorecardType=${encodeURIComponent(title)}`);
+          if (response.status === 200) {
+            const data = response.data;
             setAlreadySubmitted(data.alreadySubmitted === true);
           }
         } catch (err) {
@@ -508,12 +484,12 @@ const CandidateProfile = () => {
       setError('');
       try {
         // Save ratings to backend (extend as needed)
-        const response = await fetch(`http://localhost:5000/api/candidates/${candidateId}/scorecard`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ratings, skills, scorecardType: title })
+        const response = await axiosInstance.post(`/api/candidates/${candidateId}/scorecard`, { 
+          ratings, 
+          skills, 
+          scorecardType: title 
         });
-        if (!response.ok) throw new Error('Failed to submit scorecard');
+        if (response.status !== 201) throw new Error('Failed to submit scorecard');
         setSuccess(true);
         setAlreadySubmitted(true);
       } catch (err) {
@@ -1159,7 +1135,7 @@ const CandidateProfile = () => {
               </Typography>
             </Box>
             <Box sx={{ p: 2 }}>
-              <NotesHub candidateId={candidateId} onNoteSaved={handleAnalyzeSentiment} />
+              <NotesHub candidateId={candidateId} candidateName={candidate?.name} onNoteSaved={handleAnalyzeSentiment} />
             </Box>
           </CardContent>
         </Card>

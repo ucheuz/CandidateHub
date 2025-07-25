@@ -1,6 +1,8 @@
 from flask import Blueprint, request, jsonify
 from firebase_admin import firestore
 import datetime
+from auth import token_required
+import re
 
 notes_bp = Blueprint('notes', __name__)
 db = None
@@ -13,6 +15,7 @@ def init_db(firestore_client):
 notes_bp.init_db = init_db
 
 @notes_bp.route('/api/candidate/<candidate_id>/notes', methods=['GET'])
+@token_required
 def get_notes(candidate_id):
     try:
         if not db:
@@ -36,6 +39,7 @@ def get_notes(candidate_id):
         return jsonify({'error': 'Failed to fetch notes'}), 500
 
 @notes_bp.route('/api/candidate/<candidate_id>/notes', methods=['POST'])
+@token_required
 def create_note(candidate_id):
     try:
         print(f"\n=== Creating Note for Candidate {candidate_id} ===")
@@ -73,6 +77,7 @@ def create_note(candidate_id):
         # Check if this is a saved note (feedback)
         is_saved = note_data.get('isSaved', False)
         
+        response_data = {}
         if is_saved:
             # Store in feedback collection
             feedback_data = {
@@ -119,8 +124,44 @@ def create_note(candidate_id):
             response_data = cleaned_note_data.copy()
             response_data['id'] = doc_ref.id
             response_data['timestamp'] = datetime.datetime.now().isoformat()
+
+        # --- Mention Notification Logic ---
+        try:
+            # Find all mentions in the note content, e.g., @Jane Doe
+            mentioned_names = re.findall(r'@([A-Za-z\s]+)', note_data.get('content', ''))
             
-            return jsonify(response_data), 201
+            if mentioned_names:
+                sender_name = note_data.get('interviewer', {}).get('name', 'Someone')
+                candidate_data = candidate.to_dict()
+                candidate_name = candidate_data.get('name', 'a candidate')
+
+                for name in mentioned_names:
+                    name = name.strip()
+                    # Find the user who was mentioned
+                    users_ref = db.collection('users')
+                    mentioned_user_query = users_ref.where('name', '==', name).limit(1).stream()
+                    mentioned_user_doc = next(mentioned_user_query, None)
+
+                    if mentioned_user_doc:
+                        mentioned_user_id = mentioned_user_doc.id
+                        # Don't notify a user if they mention themselves
+                        if sender_name == name:
+                            continue
+
+                        notification_data = {
+                            'message': f"{sender_name} mentioned you in a note for {candidate_name}.",
+                            'link': f"/candidate/{candidate_id}",
+                            'read': False,
+                            'timestamp': firestore.SERVER_TIMESTAMP,
+                            'type': 'mention'
+                        }
+                        db.collection('users').document(mentioned_user_id).collection('notifications').add(notification_data)
+                        print(f"Created notification for {name} (ID: {mentioned_user_id})")
+        except Exception as notification_error:
+            # Log the error but don't fail the main request
+            print(f"Warning: Failed to create mention notification: {notification_error}")
+
+        return jsonify(response_data), 201
             
     except Exception as e:
         import traceback
@@ -129,6 +170,7 @@ def create_note(candidate_id):
         return jsonify({'error': f'Failed to create note: {str(e)}'}), 500
 
 @notes_bp.route('/api/candidate/<candidate_id>/feedback', methods=['GET'])
+@token_required
 def get_feedback(candidate_id):
     try:
         if not db:

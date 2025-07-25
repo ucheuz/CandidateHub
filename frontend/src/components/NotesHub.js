@@ -8,128 +8,177 @@ import {
   Stack,
   Avatar,
   Divider,
-  Tooltip
+  Chip,
+  Popper,
+  MenuList,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
+  Tooltip,
+  ClickAwayListener,
 } from '@mui/material';
-import SendIcon from '@mui/icons-material/Send';
-import SaveIcon from '@mui/icons-material/Save';
-
-const NotesHub = ({ candidateId }) => {
+import { 
+  Send as SendIcon, 
+  Save as SaveIcon,
+  Groups as GroupsIcon,
+  Circle as CircleIcon,
+  Person as PersonIcon,
+  AccessTime as TimeIcon,
+} from '@mui/icons-material';
+import { db, collection, getDocs } from '../firebase';
+import axiosInstance from '../api/axiosInstance';
+const NotesHub = ({ candidateId, candidateName, onNoteSaved }) => {
   const [notes, setNotes] = useState([]);
   const [newNote, setNewNote] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
+  const [typingUsers, setTypingUsers] = useState({});
   const wsRef = useRef(null);
   const notesEndRef = useRef(null);
   const reconnectAttempts = useRef(0);
   const [isConnected, setIsConnected] = useState(false);
   const maxReconnectAttempts = 3;
+  const typingTimeouts = useRef({});
+  const [users, setUsers] = useState([]);
+  const [mentionState, setMentionState] = useState({ anchorEl: null, suggestions: [], query: '' });
+  const inputRef = useRef(null);
 
   const scrollToBottom = React.useCallback(() => {
     notesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
 
-  // Fetch notes from the server
+  // Fetch all users for @mentions
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const usersSnapshot = await getDocs(collection(db, 'users'));
+        const usersList = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setUsers(usersList);
+      } catch (error) {
+        console.error("Error fetching users for mentions:", error);
+      }
+    };
+    fetchUsers();
+  }, []);
+
   const fetchNotes = React.useCallback(async () => {
     try {
-      const response = await fetch(`http://localhost:5000/api/candidate/${candidateId}/notes`);
-      if (response.ok) {
-        const data = await response.json();
-        setNotes(data.notes);
+      const response = await axiosInstance.get(`/api/candidate/${candidateId}/notes`);
+      if (response.status === 200) {
+        const data = response.data;
+        setNotes(data.notes || []);
         scrollToBottom();
       }
     } catch (error) {
       console.error('Error fetching notes:', error);
     }
   }, [candidateId, scrollToBottom]);
-
-  // Initialize WebSocket connection and handle messages
+  
   useEffect(() => {
-    const handleWebSocketMessage = (event) => {
+    const ws = new WebSocket('ws://localhost:5000/ws/notes');
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      console.log('WebSocket connected');
+      setIsConnected(true);
+      reconnectAttempts.current = 0;
+      ws.send(JSON.stringify({ type: 'init', candidateId: candidateId }));
+      ws.pingInterval = setInterval(() => {
+        if (ws?.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'ping' }));
+        }
+      }, 30000);
+    };
+
+    ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
+      const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+
       switch (data.type) {
         case 'note':
-          setNotes(prev => {
-            const newNotes = [...prev, data.note];
-            // Use setTimeout to ensure state has updated before scrolling
-            setTimeout(scrollToBottom, 0);
-            return newNotes;
-          });
+          setNotes(prev => [...prev, data.note]);
+          setTimeout(scrollToBottom, 0);
           break;
         case 'typing':
-          setIsTyping(true);
-          setTimeout(() => setIsTyping(false), 1000);
-          break;
-        case 'connected':
-          console.log('WebSocket initialization confirmed:', data);
-          break;
-        case 'pong':
-          // Received pong from server, connection is alive
+          if (data.interviewer && data.interviewer.name !== currentUser?.name) {
+            setTypingUsers(prev => ({ ...prev, [data.interviewer.name]: true }));
+            if (typingTimeouts.current[data.interviewer.name]) {
+              clearTimeout(typingTimeouts.current[data.interviewer.name]);
+            }
+            typingTimeouts.current[data.interviewer.name] = setTimeout(() => {
+              setTypingUsers(prev => {
+                const updated = { ...prev };
+                delete updated[data.interviewer.name];
+                return updated;
+              }, 2000);
+            }, 2000);
+          }
           break;
         default:
-          console.log('Received unknown message type:', data.type);
+          break;
       }
     };
 
-    const connectWebSocket = () => {
-      try {
-        wsRef.current = new WebSocket('ws://localhost:5000/ws/notes');
-        
-        wsRef.current.onopen = () => {
-          console.log('WebSocket connected');
-          setIsConnected(true);
-          reconnectAttempts.current = 0;
-          
-          // Send initial message with candidateId
-          wsRef.current.send(JSON.stringify({
-            type: 'init',
-            candidateId: candidateId
-          }));
-
-          // Start ping interval
-          const pingInterval = setInterval(() => {
-            if (wsRef.current?.readyState === WebSocket.OPEN) {
-              wsRef.current.send(JSON.stringify({ type: 'ping' }));
-            }
-          }, 30000); // Send ping every 30 seconds
-
-          // Store interval ID for cleanup
-          wsRef.current.pingInterval = pingInterval;
-        };
-        
-        wsRef.current.onclose = () => {
-          setIsConnected(false);
-          // Only try to reconnect if we haven't exceeded max attempts
-          if (reconnectAttempts.current < maxReconnectAttempts) {
-            console.log(`WebSocket connection closed. Attempting to reconnect... (${reconnectAttempts.current + 1}/${maxReconnectAttempts})`);
-            reconnectAttempts.current += 1;
-            setTimeout(connectWebSocket, 3000);
-          }
-        };
-
-        wsRef.current.onerror = (error) => {
-          console.error('WebSocket error:', error);
-        };
-
-        wsRef.current.onmessage = handleWebSocketMessage;
-      } catch (error) {
-        console.error('Failed to create WebSocket connection:', error);
-      }
+    ws.onerror = (err) => {
+      console.error('WebSocket error:', err);
     };
 
-    // Initial setup
-    connectWebSocket();
+    ws.onclose = () => {
+      setIsConnected(false);
+      if (ws.pingInterval) {
+        clearInterval(ws.pingInterval);
+      }
+      // A robust auto-reconnect strategy is complex.
+      // For now, we will simply log the closure and prevent faulty reconnect attempts.
+      console.log('WebSocket connection closed.');
+    };
+
     fetchNotes();
 
     // Cleanup on unmount
     return () => {
-      if (wsRef.current) {
-        // Clear ping interval
-        if (wsRef.current.pingInterval) {
-          clearInterval(wsRef.current.pingInterval);
-        }
-        wsRef.current.close();
+      if (ws.pingInterval) {
+        clearInterval(ws.pingInterval);
       }
+      ws.close();
     };
-  }, [candidateId, fetchNotes, maxReconnectAttempts, scrollToBottom]);
+  }, [candidateId, fetchNotes, scrollToBottom]);
+
+  const handleNoteChange = (e) => {
+    const value = e.target.value;
+    setNewNote(value);
+
+    const cursorPosition = e.target.selectionStart;
+    const textBeforeCursor = value.substring(0, cursorPosition);
+    const mentionMatch = textBeforeCursor.match(/@([\w\s]*)$/);
+
+    if (mentionMatch) {
+      const query = mentionMatch[1].toLowerCase();
+      const suggestions = users.filter(user =>
+        user.name.toLowerCase().startsWith(query) && user.name.toLowerCase() !== query
+      );
+      setMentionState({
+        anchorEl: inputRef.current,
+        suggestions: suggestions.slice(0, 5), // Limit suggestions
+        query: query
+      });
+    } else {
+      setMentionState({ anchorEl: null, suggestions: [], query: '' });
+    }
+  };
+
+  const handleMentionSelect = (user) => {
+    const currentText = newNote;
+    const cursorPosition = inputRef.current.querySelector('textarea').selectionStart;
+    const textBeforeCursor = currentText.substring(0, cursorPosition);
+    const mentionStartIndex = textBeforeCursor.lastIndexOf('@');
+
+    const textAfterMention = currentText.substring(cursorPosition);
+    const newText = `${currentText.substring(0, mentionStartIndex)}@${user.name} ${textAfterMention}`;
+    
+    setNewNote(newText);
+    setMentionState({ anchorEl: null, suggestions: [], query: '' });
+    // Focus the input field after selection
+    setTimeout(() => inputRef.current.querySelector('textarea').focus(), 0);
+  };
 
   const handleSendNote = async (shouldSave = false) => {
     console.log('handleSendNote called with shouldSave:', shouldSave);
@@ -171,31 +220,21 @@ const NotesHub = ({ candidateId }) => {
       }
 
       if (shouldSave) {
-        const url = `http://localhost:5000/api/candidate/${candidateId}/notes`;
         console.log('Saving note to database...');
-        console.log('URL:', url);
         console.log('Request data:', noteData);
         
         try {
-          const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(noteData)
-          });
+          const response = await axiosInstance.post(`/api/candidate/${candidateId}/notes`, noteData);
 
           console.log('Response status:', response.status);
-          
-          const responseText = await response.text();
-          console.log('Raw response:', responseText);
+          console.log('Raw response:', response.data);
 
-          if (!response.ok) {
+          if (response.status !== 201) {
             let errorData;
             try {
-              errorData = JSON.parse(responseText);
+              errorData = response.data;
             } catch (e) {
-              errorData = { error: responseText || 'Unknown error' };
+              errorData = { error: 'Unknown error' };
             }
             console.error('Server error:', errorData);
             throw new Error(errorData.error || 'Failed to save note');
@@ -203,7 +242,7 @@ const NotesHub = ({ candidateId }) => {
 
           let savedNote;
           try {
-            savedNote = JSON.parse(responseText);
+            savedNote = response.data;
             console.log('Note saved successfully:', savedNote);
             
             // Update the note in local state with the server response
@@ -233,14 +272,14 @@ const NotesHub = ({ candidateId }) => {
     try {
       currentUser = JSON.parse(localStorage.getItem('currentUser')) || null;
     } catch {}
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && currentUser) {
       wsRef.current.send(JSON.stringify({
         type: 'typing',
-        interviewer: currentUser && currentUser.name ? currentUser.name : 'Unknown'
+        interviewer: { name: currentUser.name, avatar: currentUser.avatar }
       }));
     }
   };
-
+  
   return (
     <Paper 
       elevation={3}
@@ -334,23 +373,51 @@ const NotesHub = ({ candidateId }) => {
             </Box>
           );
         })}
-        {isTyping && (
-          <Typography variant="caption" color="text.secondary">
-            Someone is typing...
-          </Typography>
+        {Object.keys(typingUsers).length > 0 && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 7, mt: 1 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+              {`${Object.keys(typingUsers).join(', ')} ${Object.keys(typingUsers).length > 1 ? 'are' : 'is'} typing...`}
+            </Typography>
+          </Box>
         )}
         <div ref={notesEndRef} />
       </Box>
 
       {/* Input Area */}
       <Box sx={{ p: 2, bgcolor: 'background.paper' }}>
+        <Popper
+          open={Boolean(mentionState.anchorEl)}
+          anchorEl={mentionState.anchorEl}
+          placement="top-start"
+          sx={{ zIndex: 1300, mb: 1 }}
+        >
+          <Paper elevation={3}>
+            <ClickAwayListener onClickAway={() => setMentionState({ ...mentionState, anchorEl: null })}>
+              <MenuList autoFocusItem={Boolean(mentionState.anchorEl)} id="mention-menu-list">
+                {mentionState.suggestions.length > 0 ? (
+                  mentionState.suggestions.map(user => (
+                    <MenuItem key={user.id} onClick={() => handleMentionSelect(user)}>
+                      <ListItemIcon>
+                        <Avatar sx={{ width: 24, height: 24, fontSize: '0.75rem' }}>{user.name[0]}</Avatar>
+                      </ListItemIcon>
+                      <ListItemText>{user.name}</ListItemText>
+                    </MenuItem>
+                  ))
+                ) : (
+                  <MenuItem disabled>No users found matching "@{mentionState.query}"</MenuItem>
+                )}
+              </MenuList>
+            </ClickAwayListener>
+          </Paper>
+        </Popper>
         <Stack direction="row" spacing={1}>
           <TextField
+            ref={inputRef}
             fullWidth
             variant="outlined"
             placeholder="Write your notes here..."
             value={newNote}
-            onChange={(e) => setNewNote(e.target.value)}
+            onChange={handleNoteChange}
             onKeyUp={handleTyping}
             size="small"
           />
