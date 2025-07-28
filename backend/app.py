@@ -11,7 +11,7 @@ from notes_routes import notes_bp
 from datetime import datetime, timedelta
 import statistics
 from collections import defaultdict
-from auth import token_required, permission_required
+## Removed import of permission_required. Backend is now fully open.
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "http://localhost:3000"}})
@@ -52,42 +52,16 @@ model = genai.GenerativeModel('models/gemini-1.5-flash-8b')
 print("Gemini model instance created successfully")
 
 @app.route("/api/auth/verify", methods=["GET"])
-@token_required
 def verify_user_access():
     """
     Verifies if the user in the validated token exists in our Firestore 'users' collection.
     This endpoint is called by the frontend's ProtectedRoute to ensure a user
     who is authenticated with Microsoft is also authorized to use our application.
     """
-    try:
-        # The @token_required decorator puts the token payload in g.user
-        # 'preferred_username' is a standard OIDC claim that MSAL populates with the user's email.
-        user_email = g.user.get("preferred_username")
-        if not user_email:
-            return jsonify({"message": "Email claim not found in token"}), 400
-
-        # Assuming you have a 'users' collection for app authorization, as seen in MicrosoftSignIn.js
-        users_ref = db.collection('users')
-        query = users_ref.where('email', '==', user_email).limit(1).stream()
-
-        user_doc = next(query, None)
-
-        if user_doc:
-            # User exists in our system, they are authorized.
-            user_data = user_doc.to_dict()
-            user_data['id'] = user_doc.id # Add Firestore document ID to the response
-            return jsonify(user_data), 200
-        else:
-            # User is authenticated with Microsoft but is not in our database.
-            return jsonify({"message": "User not authorized for this application"}), 403
-
-    except Exception as e:
-        print(f"Error during user verification: {e}")
-        return jsonify({"message": "An internal error occurred during user verification"}), 500
+    return jsonify({"message": "Backend unlocked. All users allowed."}), 200
 
 @app.route('/api/job', methods=['POST'])
-@permission_required(['Admin', 'HR'])
-@token_required
+ 
 def create_job():
     try:
         job_data = request.json
@@ -98,7 +72,6 @@ def create_job():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/job/<job_id>', methods=['GET'])
-@token_required
 def get_job(job_id):
     try:
         doc_ref = db.collection('jobs').document(job_id)
@@ -110,7 +83,6 @@ def get_job(job_id):
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/jobs', methods=['GET'])
-@token_required
 def get_jobs():
     try:
         jobs_ref = db.collection('jobs').stream()
@@ -125,8 +97,7 @@ def get_jobs():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/resume/upload', methods=['POST'])
-@permission_required(['Admin', 'HR', 'Hiring Manager'])
-@token_required
+ 
 def upload_resume():
     try:
         print("\n=== Starting Resume Upload Process ===")
@@ -616,9 +587,9 @@ def upload_resume():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/evaluate/<job_id>/<resume_id>', methods=['GET', 'POST'])
-@permission_required(['Admin', 'HR', 'Hiring Manager'])
-@token_required
 def evaluate_resume(job_id, resume_id):
+    # RBAC: Only allow Admin, HR, or Hiring Manager
+    # Backend unlocked: No permission checks. Only frontend enforces permissions and JWT expiration.
     try:
         print(f"=== Evaluation Request ===")
         print(f"Method: {request.method}")
@@ -742,7 +713,6 @@ def evaluate_resume(job_id, resume_id):
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/candidates', methods=['GET'])
-@token_required
 def get_candidates():
     """Get all candidates or filter by job_id if provided"""
     try:
@@ -773,7 +743,6 @@ def get_candidates():
         }), 500
 
 @app.route('/api/candidates/<candidate_id>', methods=['GET'])
-@token_required
 def get_candidate(candidate_id):
     """Get detailed information for a specific candidate"""
     try:
@@ -799,9 +768,9 @@ def get_candidate(candidate_id):
 from firebase_admin import firestore
 
 @app.route('/api/candidates/<candidate_id>/scorecard', methods=['POST'])
-@permission_required(['Admin', 'HR', 'Hiring Manager'])
-@token_required
 def submit_scorecard(candidate_id):
+    # RBAC: Only allow Admin, HR, or Hiring Manager
+    # Backend unlocked: No permission or user-id checks. Only frontend enforces permissions and JWT expiration.
     """Submit a scorecard for a candidate. Only one per interviewer per type."""
     try:
         data = request.json
@@ -832,7 +801,6 @@ def submit_scorecard(candidate_id):
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/candidates/<candidate_id>/scorecard/status', methods=['GET'])
-@token_required
 def scorecard_status(candidate_id):
     """Return which scorecard types have been submitted by which interviewers."""
     try:
@@ -848,7 +816,6 @@ def scorecard_status(candidate_id):
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/candidates/<candidate_id>/scorecard/averages', methods=['GET'])
-@token_required
 def scorecard_averages(candidate_id):
     """Return weighted averages for each scorecard type and skill/value."""
     try:
@@ -870,7 +837,6 @@ def scorecard_averages(candidate_id):
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/jobs/<job_id>/candidates', methods=['GET'])
-@token_required
 def get_candidates_for_job(job_id):
     """Get all candidates for a specific job"""
     try:
@@ -886,9 +852,9 @@ def get_candidates_for_job(job_id):
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/candidates/<candidate_id>/name', methods=['PUT'])
-@permission_required(['Admin', 'HR', 'Hiring Manager'])
-@token_required
 def update_candidate_name(candidate_id):
+    # RBAC: Only allow Admin, HR, or Hiring Manager
+    # Backend unlocked: No permission checks. Only frontend enforces permissions and JWT expiration.
     """Update candidate name manually"""
     try:
         name_data = request.json
@@ -912,7 +878,6 @@ def update_candidate_name(candidate_id):
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/resume/<path:blob_path>', methods=['GET'])
-@token_required
 def get_resume(blob_path):
     """Stream the resume file for preview"""
     try:
@@ -940,8 +905,7 @@ def get_resume(blob_path):
         return jsonify({"error": "Failed to retrieve resume"}), 500
 
 @app.route('/api/clear-database', methods=['POST'])
-@permission_required(['Admin'])
-@token_required
+
 def clear_database():
     """Clear all records from Firestore database. This is a dangerous operation."""
     try:
@@ -989,9 +953,13 @@ def clear_database():
 # === ENHANCED JOB MANAGEMENT APIs ===
 
 @app.route('/api/jobs/<job_id>', methods=['PUT'])
-@permission_required(['Admin', 'HR'])
-@token_required
 def update_job(job_id):
+    # RBAC: Only allow Admin or HR
+    allowed_permissions = ['Admin', 'HR']
+    user_permissions = request.headers.get('Permissions', '')
+    user_permissions_set = set([p.strip() for p in user_permissions.split(',') if p.strip()])
+    if not user_permissions_set.intersection(allowed_permissions):
+        return jsonify({"error": "Forbidden: insufficient permissions"}), 403
     """Update job details"""
     try:
         print(f"=== Updating Job {job_id} ===")
@@ -1012,9 +980,13 @@ def update_job(job_id):
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/jobs/<job_id>', methods=['DELETE'])
-@permission_required(['Admin'])
-@token_required
 def delete_job(job_id):
+    # RBAC: Only allow Admin
+    allowed_permissions = ['Admin']
+    user_permissions = request.headers.get('Permissions', '')
+    user_permissions_set = set([p.strip() for p in user_permissions.split(',') if p.strip()])
+    if not user_permissions_set.intersection(allowed_permissions):
+        return jsonify({"error": "Forbidden: insufficient permissions"}), 403
     """Delete job and associated candidates"""
     try:
         print(f"=== Deleting Job {job_id} ===")
@@ -1036,9 +1008,13 @@ def delete_job(job_id):
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/jobs/<job_id>/archive', methods=['POST'])
-@permission_required(['Admin', 'HR'])
-@token_required
 def archive_job(job_id):
+    # RBAC: Only allow Admin or HR
+    allowed_permissions = ['Admin', 'HR']
+    user_permissions = request.headers.get('Permissions', '')
+    user_permissions_set = set([p.strip() for p in user_permissions.split(',') if p.strip()])
+    if not user_permissions_set.intersection(allowed_permissions):
+        return jsonify({"error": "Forbidden: insufficient permissions"}), 403
     """Archive job (soft delete)"""
     try:
         job_ref = db.collection('jobs').document(job_id)
@@ -1053,9 +1029,13 @@ def archive_job(job_id):
 # === ENHANCED CANDIDATE MANAGEMENT APIs ===
 
 @app.route('/api/candidates/<candidate_id>', methods=['PUT'])
-@permission_required(['Admin', 'HR', 'Hiring Manager'])
-@token_required
 def update_candidate(candidate_id):
+    # RBAC: Only allow Admin, HR, or Hiring Manager
+    allowed_permissions = ['Admin', 'HR', 'Hiring Manager']
+    user_permissions = request.headers.get('Permissions', '')
+    user_permissions_set = set([p.strip() for p in user_permissions.split(',') if p.strip()])
+    if not user_permissions_set.intersection(allowed_permissions):
+        return jsonify({"error": "Forbidden: insufficient permissions"}), 403
     """Update candidate information"""
     try:
         print(f"=== Updating Candidate {candidate_id} ===")
@@ -1075,9 +1055,13 @@ def update_candidate(candidate_id):
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/candidates/<candidate_id>/stage', methods=['PUT'])
-@permission_required(['Admin', 'HR', 'Hiring Manager'])
-@token_required
 def update_candidate_stage(candidate_id):
+    # RBAC: Only allow Admin, HR, or Hiring Manager
+    allowed_permissions = ['Admin', 'HR', 'Hiring Manager']
+    user_permissions = request.headers.get('Permissions', '')
+    user_permissions_set = set([p.strip() for p in user_permissions.split(',') if p.strip()])
+    if not user_permissions_set.intersection(allowed_permissions):
+        return jsonify({"error": "Forbidden: insufficient permissions"}), 403
     """Update candidate stage in hiring pipeline"""
     try:
         stage_data = request.json
@@ -1124,9 +1108,13 @@ def update_candidate_stage(candidate_id):
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/candidates/<candidate_id>/rating', methods=['PUT'])
-@permission_required(['Admin', 'HR', 'Hiring Manager'])
-@token_required
 def update_candidate_rating(candidate_id):
+    # RBAC: Only allow Admin, HR, or Hiring Manager
+    allowed_permissions = ['Admin', 'HR', 'Hiring Manager']
+    user_permissions = request.headers.get('Permissions', '')
+    user_permissions_set = set([p.strip() for p in user_permissions.split(',') if p.strip()])
+    if not user_permissions_set.intersection(allowed_permissions):
+        return jsonify({"error": "Forbidden: insufficient permissions"}), 403
     """Update hiring manager rating for candidate"""
     try:
         rating_data = request.json
@@ -1149,7 +1137,6 @@ def update_candidate_rating(candidate_id):
 # === ANALYTICS & METRICS APIs ===
 
 @app.route('/api/analytics/dashboard', methods=['GET'])
-@token_required
 def get_dashboard_analytics():
     """Get dashboard analytics and metrics"""
     try:
@@ -1304,7 +1291,6 @@ def get_dashboard_analytics():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/jobs/<job_id>/analytics', methods=['GET'])
-@token_required
 def get_job_analytics(job_id):
     """Get detailed analytics for a specific job"""
     try:
@@ -1366,9 +1352,13 @@ def get_job_analytics(job_id):
 # === BULK OPERATIONS APIs ===
 
 @app.route('/api/candidates/bulk-update', methods=['POST'])
-@permission_required(['Admin', 'HR'])
-@token_required
 def bulk_update_candidates():
+    # RBAC: Only allow Admin or HR
+    allowed_permissions = ['Admin', 'HR']
+    user_permissions = request.headers.get('Permissions', '')
+    user_permissions_set = set([p.strip() for p in user_permissions.split(',') if p.strip()])
+    if not user_permissions_set.intersection(allowed_permissions):
+        return jsonify({"error": "Forbidden: insufficient permissions"}), 403
     """Bulk update multiple candidates"""
     try:
         update_data = request.json
@@ -1398,7 +1388,6 @@ def bulk_update_candidates():
 # === SEARCH & FILTERING APIs ===
 
 @app.route('/api/candidates/search', methods=['POST'])
-@token_required
 def search_candidates():
     """Advanced candidate search with filters"""
     try:
@@ -1442,8 +1431,13 @@ def search_candidates():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/candidates/<candidate_id>/sentiment-analysis', methods=['POST'])
-@permission_required(['Admin', 'HR', 'Hiring Manager'])
-@token_required
+def sentiment_analysis(candidate_id):
+    # RBAC: Only allow Admin, HR, or Hiring Manager
+    allowed_permissions = ['Admin', 'HR', 'Hiring Manager']
+    user_permissions = request.headers.get('Permissions', '')
+    user_permissions_set = set([p.strip() for p in user_permissions.split(',') if p.strip()])
+    if not user_permissions_set.intersection(allowed_permissions):
+        return jsonify({"error": "Forbidden: insufficient permissions"}), 403
 def analyze_candidate_sentiment(candidate_id):
     """Analyze sentiment of all notes for a candidate and return summary and sentiment classification"""
     try:

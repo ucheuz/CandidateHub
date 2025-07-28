@@ -29,13 +29,4 @@ export const loginRequest = {
   scopes: ["user.read"],
 };
 
-/**
- * Add here the scopes to request when obtaining an access token for your own API.
- * The scope URI should be the one you created in the "Expose an API" section of your App Registration.
- * e.g., "api://<your-client-id>/access_as_user"
- */
-export const protectedResources = {
-  api: {
-    scopes: [`api://${process.env.REACT_APP_CLIENT_ID}/access_as_user`],
-  },
-};
+

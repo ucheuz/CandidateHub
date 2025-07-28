@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { msalInstance } from './msalConfig';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 
 import { ThemeProvider, createTheme } from '@mui/material';
@@ -70,6 +71,12 @@ const theme = createTheme({
 });
 
 function App() {
+  useEffect(() => {
+    const accounts = msalInstance.getAllAccounts();
+    if (accounts && accounts.length > 0) {
+      msalInstance.setActiveAccount(accounts[0]);
+    }
+  }, []);
   return (
     <ThemeProvider theme={theme}>
       <Router>

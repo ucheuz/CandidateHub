@@ -6,6 +6,7 @@ import { Button, Box, Typography, CircularProgress, Card } from '@mui/material';
 import GroupsIcon from '@mui/icons-material/Groups';
 import { loginRequest } from '../msalConfig';
 import { db, collection, query, where, getDocs } from "../firebase";
+import { storeUserIdByEmail } from '../api/storeUserIdByEmail';
 
 const MicrosoftSignIn = () => {
   const { instance, accounts, inProgress } = useMsal();
@@ -28,6 +29,8 @@ const MicrosoftSignIn = () => {
   useEffect(() => {
     // This effect handles the post-login flow
     if (isAuthenticated && accounts.length > 0) {
+      // Always set the active MSAL account after login
+      instance.setActiveAccount(accounts[0]);
       setLoading(true);
       const account = accounts[0];
       const userEmail = account.username; // email is in username field
@@ -37,23 +40,19 @@ const MicrosoftSignIn = () => {
         console.log("ID Token (JWT):", account.idToken);
       }
 
-      checkUserPermissions(userEmail).then(firestoreUser => {
+      checkUserPermissions(userEmail).then(async firestoreUser => {
         if (firestoreUser) {
+          // Store userId in localStorage for backend RBAC
+          await storeUserIdByEmail(userEmail);
           // User is authorized. Store their details and navigate.
-          localStorage.setItem('currentUser', JSON.stringify({ // firestoreUser now includes the 'id'
-            ...firestoreUser, // Store the full user profile from Firestore
+          localStorage.setItem('currentUser', JSON.stringify({
+            ...firestoreUser,
             provider: 'microsoft'
           }));
-          // This is for compatibility with other components. Should be refactored later.
           localStorage.setItem('candidatehub_auth', JSON.stringify({ email: userEmail }));
-          
-          // The token is managed by MSAL. No need to store it in localStorage manually.
           navigate('/dashboard');
-
         } else {
-          // User is authenticated with Microsoft, but not in our app's database.
           setAuthError("Your account is not authorized to access this application. Please contact your administrator.");
-          // Log them out.
           instance.logoutRedirect({
             postLogoutRedirectUri: "/",
           });

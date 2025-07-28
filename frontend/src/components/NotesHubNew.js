@@ -254,9 +254,9 @@ const NotesHub = ({ candidateId, onNoteSaved }) => {
         const response = await fetch(`http://localhost:5000/api/candidate/${candidateId}/notes`, {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
+            'Content-Type': 'application/json'
           },
-          body: JSON.stringify(noteData),
+          body: JSON.stringify(noteData)
         });
         
         console.log('Response status:', response.status);

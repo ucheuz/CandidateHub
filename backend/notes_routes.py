@@ -1,7 +1,6 @@
 from flask import Blueprint, request, jsonify
 from firebase_admin import firestore
 import datetime
-from auth import token_required
 import re
 
 notes_bp = Blueprint('notes', __name__)
@@ -15,7 +14,6 @@ def init_db(firestore_client):
 notes_bp.init_db = init_db
 
 @notes_bp.route('/api/candidate/<candidate_id>/notes', methods=['GET'])
-@token_required
 def get_notes(candidate_id):
     try:
         if not db:
@@ -39,7 +37,6 @@ def get_notes(candidate_id):
         return jsonify({'error': 'Failed to fetch notes'}), 500
 
 @notes_bp.route('/api/candidate/<candidate_id>/notes', methods=['POST'])
-@token_required
 def create_note(candidate_id):
     try:
         print(f"\n=== Creating Note for Candidate {candidate_id} ===")
@@ -170,7 +167,6 @@ def create_note(candidate_id):
         return jsonify({'error': f'Failed to create note: {str(e)}'}), 500
 
 @notes_bp.route('/api/candidate/<candidate_id>/feedback', methods=['GET'])
-@token_required
 def get_feedback(candidate_id):
     try:
         if not db:

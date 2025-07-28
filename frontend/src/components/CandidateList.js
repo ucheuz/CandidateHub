@@ -359,8 +359,8 @@ const CandidateList = () => {
               const response = await fetch(`http://localhost:5000/api/candidates/${doc.id}/sentiment-analysis`, {
                 method: 'POST',
                 headers: {
-                  'Content-Type': 'application/json',
-                },
+                  'Content-Type': 'application/json'
+                }
               });
               
               if (response.ok) {

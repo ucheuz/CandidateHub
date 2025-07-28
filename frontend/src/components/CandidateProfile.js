@@ -483,12 +483,24 @@ const CandidateProfile = () => {
       setSubmitting(true);
       setError('');
       try {
-        // Save ratings to backend (extend as needed)
-        const response = await axiosInstance.post(`/api/candidates/${candidateId}/scorecard`, { 
-          ratings, 
-          skills, 
-          scorecardType: title 
+        // Map frontend fields to backend expected fields
+        const interviewer = window.currentUser?.email || 'Anonymous';
+        const type = title?.toLowerCase().includes('departmental') ? 'departmental' : (title?.toLowerCase().includes('core') ? 'core_values' : title);
+        const ratingsObj = {};
+        skills.forEach((skill, idx) => {
+          ratingsObj[skill] = ratings[idx];
         });
+        const payload = {
+          interviewer,
+          type,
+          ratings: ratingsObj
+        };
+        const response = await axiosInstance.post(`/api/candidates/${candidateId}/scorecard`, payload);
+        if (response.status === 409) {
+          setError('You have already submitted this scorecard for this candidate.');
+          setAlreadySubmitted(true);
+          return;
+        }
         if (response.status !== 201) throw new Error('Failed to submit scorecard');
         setSuccess(true);
         setAlreadySubmitted(true);
