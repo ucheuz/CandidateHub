@@ -28,7 +28,7 @@ import {
   ExitToApp
 } from '@mui/icons-material';
 import { useIsAuthenticated, useMsal } from '@azure/msal-react';
-import { collection, onSnapshot, query, where, doc, updateDoc, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, query, doc, updateDoc, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 
 const Navbar = () => {
@@ -36,6 +36,7 @@ const Navbar = () => {
   const [profileMenuAnchor, setProfileMenuAnchor] = useState(null);
   const [notificationsMenuAnchor, setNotificationsMenuAnchor] = useState(null);
   const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [currentUser, setCurrentUser] = useState(null);
   const location = useLocation();
   const navigate = useNavigate();
@@ -58,26 +59,27 @@ const Navbar = () => {
     }
   }, [isAuthenticated]);
 
-  // Set up notifications listener
+  // Listen for notifications in notifications collection (new pattern)
   useEffect(() => {
     if (isAuthenticated && currentUser?.id) {
+      // notifications/{userId}/items
       const notificationsQuery = query(
-        collection(db, 'users', currentUser.id, 'notifications'),
-        where('read', '==', false),
+        collection(db, 'notifications', currentUser.id, 'items'),
         orderBy('timestamp', 'desc')
       );
-
       const unsubscribe = onSnapshot(notificationsQuery, (snapshot) => {
-        const fetchedNotifications = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        setNotifications(fetchedNotifications);
+        const fetched = [];
+        let unread = 0;
+        snapshot.forEach(docSnap => {
+          const data = docSnap.data();
+          if (!data.read) unread++;
+          fetched.push({ id: docSnap.id, ...data });
+        });
+        setNotifications(fetched);
+        setUnreadCount(unread);
       }, (error) => {
-        console.error("Error fetching notifications:", error);
+        console.error('Error fetching notifications:', error);
       });
-
-      // Cleanup listener on unmount
       return () => unsubscribe();
     }
   }, [isAuthenticated, currentUser]);
@@ -116,11 +118,10 @@ const Navbar = () => {
   };
 
   const handleNotificationClick = async (notification) => {
-    // Mark as read in Firestore
-    const notificationRef = doc(db, 'users', currentUser.id, 'notifications', notification.id);
+    // Mark as read in Firestore (notifications/{userId}/items/{id})
+    const notificationRef = doc(db, 'notifications', currentUser.id, 'items', notification.id);
     await updateDoc(notificationRef, { read: true });
-
-    // Navigate to the relevant link
+    // Optionally, navigate if notification has a link
     if (notification.link) {
       navigate(notification.link);
     }
@@ -215,7 +216,7 @@ const Navbar = () => {
                 }
               }}
             >
-              <Badge badgeContent={notifications.length} color="error">
+              <Badge badgeContent={unreadCount} color="error">
                 <Notifications />
               </Badge>
             </IconButton>
@@ -256,8 +257,6 @@ const Navbar = () => {
             <MenuIcon />
           </IconButton>
         </Box>
-
-        {/* Mobile Menu */}
         <Menu
           anchorEl={menuAnchor}
           open={Boolean(menuAnchor)}
@@ -294,7 +293,7 @@ const Navbar = () => {
           <MenuItem onClick={handleMenuClose}>
             <ListItemIcon><Notifications /></ListItemIcon>
             <ListItemText primary="Notifications" />
-            <Badge badgeContent={3} color="error" />
+            <Badge badgeContent={unreadCount} color="error" />
           </MenuItem>
         </Menu>
 

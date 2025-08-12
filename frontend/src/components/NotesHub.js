@@ -39,6 +39,8 @@ const NotesHub = ({ candidateId, candidateName, onNoteSaved }) => {
   const typingTimeouts = useRef({});
   const [users, setUsers] = useState([]);
   const [mentionState, setMentionState] = useState({ anchorEl: null, suggestions: [], query: '' });
+  // Use a callback ref to get the textarea DOM node
+  const textareaRef = useRef(null);
   const inputRef = useRef(null);
 
   const scrollToBottom = React.useCallback(() => {
@@ -148,17 +150,30 @@ const NotesHub = ({ candidateId, candidateName, onNoteSaved }) => {
 
     const cursorPosition = e.target.selectionStart;
     const textBeforeCursor = value.substring(0, cursorPosition);
-    const mentionMatch = textBeforeCursor.match(/@([\w\s]*)$/);
-
-    if (mentionMatch) {
-      const query = mentionMatch[1].toLowerCase();
-      const suggestions = users.filter(user =>
-        user.name.toLowerCase().startsWith(query) && user.name.toLowerCase() !== query
-      );
+    // Find the last @ and get the first two words after it (for mention suggestions)
+    const atMatch = textBeforeCursor.match(/@([^@\n]*)$/);
+    let mentionQuery = '';
+    let showPopper = false;
+    if (atMatch) {
+      // Only use the first two words after @
+      const afterAt = atMatch[1];
+      const words = afterAt.trim().split(/\s+/);
+      // Only show popper if cursor is still within the mention (not after two words)
+      if (words.length <= 2) {
+        mentionQuery = words.join(' ').toLowerCase();
+        showPopper = true;
+      }
+    }
+    if (showPopper && mentionQuery.length > 0) {
+      // Suggest users whose name starts with or contains the query (case-insensitive, ignore spaces)
+      const suggestions = users.filter(user => {
+        const userName = user.name ? user.name.toLowerCase() : '';
+        return userName.replace(/\s+/g, '').includes(mentionQuery.replace(/\s+/g, ''));
+      });
       setMentionState({
         anchorEl: inputRef.current,
         suggestions: suggestions.slice(0, 5), // Limit suggestions
-        query: query
+        query: mentionQuery
       });
     } else {
       setMentionState({ anchorEl: null, suggestions: [], query: '' });
@@ -167,27 +182,35 @@ const NotesHub = ({ candidateId, candidateName, onNoteSaved }) => {
 
   const handleMentionSelect = (user) => {
     const currentText = newNote;
-    const cursorPosition = inputRef.current.querySelector('textarea').selectionStart;
-    const textBeforeCursor = currentText.substring(0, cursorPosition);
-    const mentionStartIndex = textBeforeCursor.lastIndexOf('@');
-
-    const textAfterMention = currentText.substring(cursorPosition);
-    const newText = `${currentText.substring(0, mentionStartIndex)}@${user.name} ${textAfterMention}`;
-    
+    let cursorPosition = null;
+    if (textareaRef.current && typeof textareaRef.current.selectionStart === 'number') {
+      cursorPosition = textareaRef.current.selectionStart;
+    }
+    let newText;
+    if (cursorPosition !== null) {
+      const textBeforeCursor = currentText.substring(0, cursorPosition);
+      // Replace the last @mentionQuery with the selected user name
+      const replaced = textBeforeCursor.replace(/@([^@\n]*)$/, `@${user.name} `);
+      const textAfterMention = currentText.substring(cursorPosition);
+      newText = replaced + textAfterMention;
+    } else {
+      // fallback: append at end
+      newText = `${currentText}@${user.name} `;
+    }
     setNewNote(newText);
     setMentionState({ anchorEl: null, suggestions: [], query: '' });
-    // Focus the input field after selection
-    setTimeout(() => inputRef.current.querySelector('textarea').focus(), 0);
+    // Focus the textarea after selection
+    setTimeout(() => {
+      if (textareaRef.current) textareaRef.current.focus();
+    }, 0);
   };
 
   const handleSendNote = async (shouldSave = false) => {
     console.log('handleSendNote called with shouldSave:', shouldSave);
-    
     if (!newNote.trim()) {
       console.log('Note is empty, returning');
       return;
     }
-
     console.log('Candidate ID:', candidateId);
     // Get current user from localStorage
     let currentUser = null;
@@ -204,13 +227,56 @@ const NotesHub = ({ candidateId, candidateName, onNoteSaved }) => {
       isSaved: shouldSave,
       type: 'candidate_note'
     };
-    
     console.log('Created note data:', noteData);
+
+    // --- Notification logic for @mentions ---
+    // Find all @mentions in the note (case-insensitive, only match exact user names, only first two words after @)
+    const mentionRegex = /@([A-Za-z0-9_\- ]{1,})/g;
+    let match;
+    const mentionedNames = [];
+    while ((match = mentionRegex.exec(newNote)) !== null) {
+      // Only take the first two words after @ as the name
+      const name = match[1].trim().split(/\s+/).slice(0,2).join(' ');
+      if (name && !mentionedNames.some(n => n.toLowerCase() === name.toLowerCase())) mentionedNames.push(name);
+    }
+    // For each mentioned user, create a notification in Firestore (case-insensitive, exact match)
+    if (mentionedNames.length > 0) {
+      // Find user objects for mentioned names (case-insensitive, exact match)
+      const mentionedUsers = users.filter(u =>
+        u.name && mentionedNames.some(n => u.name.trim().toLowerCase() === n.trim().toLowerCase())
+      );
+      if (!window.firebase || !window.firebase.firestore) {
+        console.error('window.firebase or window.firebase.firestore is not available!');
+      }
+      for (const user of mentionedUsers) {
+        try {
+          // notifications/{userId}/items/{autoId}
+          const notifRef = window.firebase.firestore()
+            .collection('notifications')
+            .doc(user.id)
+            .collection('items');
+          const notifData = {
+            type: 'mention',
+            message: `${currentUser?.name || 'Someone'} mentioned you in a note about ${candidateName || 'a candidate'}.`,
+            candidateId,
+            candidateName,
+            timestamp: window.firebase.firestore.FieldValue.serverTimestamp(),
+            read: false,
+            from: currentUser?.name || 'Unknown',
+            noteContent: newNote
+          };
+          const notifResult = await notifRef.add(notifData);
+          console.log('Notification created for user', user.name, 'with id', notifResult.id, notifData);
+        } catch (err) {
+          console.error('Failed to create notification for', user.name, err);
+        }
+      }
+    }
+    // --- End notification logic ---
 
     try {
       // Always update local state immediately for better UX
       setNotes(prev => [...prev, noteData]);
-      
       // Try WebSocket if available
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify({
@@ -218,17 +284,13 @@ const NotesHub = ({ candidateId, candidateName, onNoteSaved }) => {
           note: noteData
         }));
       }
-
       if (shouldSave) {
         console.log('Saving note to database...');
         console.log('Request data:', noteData);
-        
         try {
           const response = await axiosInstance.post(`/api/candidate/${candidateId}/notes`, noteData);
-
           console.log('Response status:', response.status);
           console.log('Raw response:', response.data);
-
           if (response.status !== 201) {
             let errorData;
             try {
@@ -239,12 +301,10 @@ const NotesHub = ({ candidateId, candidateName, onNoteSaved }) => {
             console.error('Server error:', errorData);
             throw new Error(errorData.error || 'Failed to save note');
           }
-
           let savedNote;
           try {
             savedNote = response.data;
             console.log('Note saved successfully:', savedNote);
-            
             // Update the note in local state with the server response
             setNotes(prev => prev.map(note => 
               note === noteData ? { ...savedNote } : note
@@ -260,7 +320,6 @@ const NotesHub = ({ candidateId, candidateName, onNoteSaved }) => {
           alert('Failed to save note: ' + error.message);
         }
       }
-      
       setNewNote('');
     } catch (error) {
       console.error('Error handling note:', error);
@@ -412,6 +471,7 @@ const NotesHub = ({ candidateId, candidateName, onNoteSaved }) => {
         </Popper>
         <Stack direction="row" spacing={1}>
           <TextField
+            inputRef={textareaRef}
             ref={inputRef}
             fullWidth
             variant="outlined"
