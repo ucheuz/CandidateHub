@@ -104,7 +104,7 @@ const JobAnalytics = () => {
   useEffect(() => {
     const fetchJobAnalytics = async () => {
       try {
-        const response = await fetch(`http://localhost:5000/api/jobs/${jobId}/analytics`);
+        const response = await fetch(`/api/jobs/${jobId}/analytics`);
         if (response.ok) {
           const data = await response.json();
           setAnalytics(data);

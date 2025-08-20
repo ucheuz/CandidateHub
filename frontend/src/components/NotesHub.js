@@ -75,7 +75,12 @@ const NotesHub = ({ candidateId, candidateName, onNoteSaved }) => {
   }, [candidateId, scrollToBottom]);
   
   useEffect(() => {
-    const ws = new WebSocket('ws://localhost:5000/ws/notes');
+    // Use backend URL for WebSocket connection in development
+    const wsUrl = process.env.NODE_ENV === 'development' 
+      ? 'ws://localhost:8000/ws/notes'
+      : 'wss://' + window.location.host + '/ws/notes';
+    
+    const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {

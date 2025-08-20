@@ -149,6 +149,15 @@ const Dashboard = () => {
   }
 
   const { overview, stageDistribution, jobMetrics, trends } = analytics;
+  
+  // Debug logging for analytics data (development only)
+  if (process.env.NODE_ENV === 'development') {
+    console.log('=== Dashboard Analytics Debug ===');
+    console.log('Overview:', overview);
+    console.log('Stage Distribution:', stageDistribution);
+    console.log('Job Metrics:', jobMetrics);
+    console.log('Trends:', trends);
+  }
 
   // Prepare chart data
   const stageData = Object.entries(stageDistribution).map(([stage, count]) => ({
@@ -195,10 +204,12 @@ const Dashboard = () => {
     { reason: 'Other', count: analytics.rejectionReasons?.other || 0 }
   ].filter(item => item.count > 0);
 
-  // Debug logging for rejection reasons
-  console.log('=== Dashboard Rejection Reasons Debug ===');
-  console.log('Analytics rejection reasons:', analytics.rejectionReasons);
-  console.log('Filtered rejection reasons data:', rejectionReasonsData);
+  // Debug logging for rejection reasons (development only)
+  if (process.env.NODE_ENV === 'development') {
+    console.log('=== Dashboard Rejection Reasons Debug ===');
+    console.log('Analytics rejection reasons:', analytics.rejectionReasons);
+    console.log('Filtered rejection reasons data:', rejectionReasonsData);
+  }
 
   // Time to Hire data (in days)
   const timeToHireData = [
@@ -260,7 +271,7 @@ const Dashboard = () => {
         <Grid item xs={12} sm={6} md={3}>
           <MetricCard
             title="Avg Match Score"
-            value={`${overview.averageMatchScore}%`}
+            value={`${overview.overallAvgMatchScore || 0}%`}
             subtitle="CV compatibility"
             icon={<Assessment />}
             color="#81C784"
@@ -268,11 +279,11 @@ const Dashboard = () => {
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
           <MetricCard
-            title="Recent Candidates"
-            value={overview.recentCandidates}
-            subtitle="Last 7 days"
-            icon={<Schedule />}
-            color="#FFB74D"
+            title="Hired Candidates"
+            value={overview.hiredCandidates || 0}
+            subtitle="Successfully placed"
+            icon={<CheckCircle />}
+            color="#4CAF50"
           />
         </Grid>
       </Grid>
@@ -386,7 +397,7 @@ const Dashboard = () => {
                             sx={{ fontSize: { xs: '0.65rem', sm: '0.75rem' } }}
                           />
                           <Chip
-                            label={`${job.avgMatchScore.toFixed(1)}% avg match`}
+                            label={`${(job.avgMatchScore || 0).toFixed(1)}% avg match`}
                             size="small"
                             color="success"
                             variant="outlined"

@@ -12,8 +12,8 @@ import Evaluation from './components/Evaluation';
 import CandidateList from './components/CandidateList';
 import CandidateProfile from './components/CandidateProfile';
 import JobSelection from './components/JobSelection';
-import MicrosoftSignIn from './components/MicrosoftSignIn';
 import ProtectedRoute from './components/ProtectedRoute';
+import CareerPortal from './components/CareerPortal';
 
 const theme = createTheme({
   palette: {
@@ -81,8 +81,8 @@ function App() {
     <ThemeProvider theme={theme}>
       <Router>
         <Routes>
-          {/* Public route for signing in */}
-          <Route path="/" element={<MicrosoftSignIn />} />
+          {/* Public career portal */}
+          <Route path="/" element={<CareerPortal />} />
 
           {/* All other routes are protected */}
           <Route element={<ProtectedRoute />}>

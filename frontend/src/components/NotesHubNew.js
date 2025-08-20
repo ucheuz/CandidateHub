@@ -44,8 +44,8 @@ const NotesHub = ({ candidateId, onNoteSaved }) => {
   const fetchNotes = React.useCallback(async () => {
     try {
       const [notesResponse, feedbackResponse] = await Promise.all([
-        fetch(`http://localhost:5000/api/candidate/${candidateId}/notes`),
-        fetch(`http://localhost:5000/api/candidate/${candidateId}/feedback`)
+        fetch(`/api/candidate/${candidateId}/notes`),
+        fetch(`/api/candidate/${candidateId}/feedback`)
       ]);
       
       if (notesResponse.ok && feedbackResponse.ok) {
@@ -134,7 +134,12 @@ const NotesHub = ({ candidateId, onNoteSaved }) => {
 
     const connectWebSocket = () => {
       try {
-        wsRef.current = new WebSocket('ws://localhost:5000/ws/notes');
+        // Use backend URL for WebSocket connection in development
+    const wsUrl = process.env.NODE_ENV === 'development' 
+      ? 'ws://localhost:8000/ws/notes'
+      : 'wss://' + window.location.host + '/ws/notes';
+    
+    wsRef.current = new WebSocket(wsUrl);
         
         wsRef.current.onopen = () => {
           console.log('WebSocket connected');
@@ -251,7 +256,7 @@ const NotesHub = ({ candidateId, onNoteSaved }) => {
       // Always send to backend (it will handle routing to notes or feedback)
       console.log('Saving to backend...');
       try {
-        const response = await fetch(`http://localhost:5000/api/candidate/${candidateId}/notes`, {
+        const response = await fetch(`/api/candidate/${candidateId}/notes`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'

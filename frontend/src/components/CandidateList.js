@@ -356,7 +356,7 @@ const CandidateList = () => {
           // If no sentiment analysis exists, trigger analysis
           if (!data.feedback_sentiment) {
             try {
-              const response = await fetch(`http://localhost:5000/api/candidates/${doc.id}/sentiment-analysis`, {
+              const response = await fetch(`/api/candidates/${doc.id}/sentiment-analysis`, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json'

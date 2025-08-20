@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  frontend:
+    build: 
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    environment:
+      - BACKEND_URL=http://${BACKEND_URL:-backend}:${BACKEND_PORT:-8000}
+    depends_on:
+      - backend
+    networks:
+      - candidatehub-network
+
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - WEBSITES_PORT=8000
+      - FLASK_ENV=production
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - AZURE_STORAGE_CONNECTION_STRING=${AZURE_STORAGE_CONNECTION_STRING}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/firebase_key.json
+    networks:
+      - candidatehub-network
+
+networks:
+  candidatehub-network:
+    driver: bridge

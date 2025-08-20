@@ -1,0 +1,250 @@
+openapi: 3.0.0
+info:
+  title: CandidateHub API
+  description: API documentation for CandidateHub HR evaluation platform
+  version: 1.0.0
+servers:
+  - url: /
+    description: Relative paths for security
+paths:
+  /api/resume/upload:
+    post:
+      summary: Upload candidate resume
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                job_id:
+                  type: string
+      responses:
+        '201':
+          description: Resume uploaded and evaluated successfully
+        '400':
+          description: Invalid request
+        '500':
+          description: Server error
+
+  /api/candidates:
+    get:
+      summary: Get all candidates
+      parameters:
+        - in: query
+          name: job_id
+          schema:
+            type: string
+          description: Filter candidates by job ID
+      responses:
+        '200':
+          description: List of candidates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Candidate'
+
+  /api/candidates/{candidate_id}:
+    get:
+      summary: Get candidate details
+      parameters:
+        - in: path
+          name: candidate_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Candidate details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Candidate'
+    put:
+      summary: Update candidate information
+      parameters:
+        - in: path
+          name: candidate_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CandidateUpdate'
+      responses:
+        '200':
+          description: Candidate updated successfully
+
+  /api/candidates/{candidate_id}/stage:
+    put:
+      summary: Update candidate stage
+      parameters:
+        - in: path
+          name: candidate_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                stage:
+                  type: string
+                  enum: [NEW, Evaluated, Phone Screen, Interview 1, Interview 2, Interview 3, Hired, Rejected]
+                rejectionReason:
+                  type: string
+      responses:
+        '200':
+          description: Stage updated successfully
+
+  /api/jobs:
+    get:
+      summary: Get all jobs
+      responses:
+        '200':
+          description: List of jobs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Job'
+    post:
+      summary: Create new job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobCreate'
+      responses:
+        '201':
+          description: Job created successfully
+
+  /api/analytics/dashboard:
+    get:
+      summary: Get dashboard analytics
+      responses:
+        '200':
+          description: Dashboard analytics data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardAnalytics'
+
+  /api/candidates/{candidate_id}/sentiment-analysis:
+    post:
+      summary: Analyze candidate feedback sentiment
+      parameters:
+        - in: path
+          name: candidate_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Sentiment analysis results
+
+components:
+  schemas:
+    Candidate:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        status:
+          type: string
+        cv_match_score:
+          type: number
+        job_id:
+          type: string
+        resume_blob_path:
+          type: string
+        upload_date:
+          type: string
+          format: date-time
+
+    CandidateUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+        stage:
+          type: string
+
+    Job:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        required_skills:
+          type: array
+          items:
+            type: string
+        location:
+          type: string
+        type:
+          type: string
+        hiringManagers:
+          type: array
+          items:
+            type: string
+
+    JobCreate:
+      type: object
+      required:
+        - title
+        - description
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        required_skills:
+          type: array
+          items:
+            type: string
+
+    DashboardAnalytics:
+      type: object
+      properties:
+        overview:
+          type: object
+          properties:
+            totalJobs:
+              type: integer
+            totalCandidates:
+              type: integer
+            averageMatchScore:
+              type: number
+            recentCandidates:
+              type: integer
+        stageDistribution:
+          type: object
+          additionalProperties:
+            type: integer
+        trends:
+          type: object

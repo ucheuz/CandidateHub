@@ -1,10 +1,17 @@
-flask==3.0.0
-flask-cors==4.0.0
-flask-sock==0.6.0
-firebase-admin==6.2.0
-google-cloud-storage==2.10.0
-azure-storage-blob==12.17.0
-python-dotenv==1.0.0
-google-generativeai==0.3.0
-python-multipart==0.0.6
+Flask==2.3.3
+Flask-CORS==4.0.0
+gunicorn==21.2.0
 PyPDF2==3.0.1
+azure-storage-blob==12.17.0
+google-generativeai==0.3.2
+firebase-admin==6.2.0
+python-dotenv==1.0.0
+flask-socketio==5.3.6
+python-socketio==5.9.0
+requests==2.31.0
+google-cloud-storage==2.10.0
+python-multipart==0.0.6
+flask-sock==0.6.0
+flask-swagger-ui==4.11.1
+# SmartRecruiters async dependencies - using built-in asyncio
+# aiohttp==3.8.5  # Commented out due to Python 3.13 compatibility issues

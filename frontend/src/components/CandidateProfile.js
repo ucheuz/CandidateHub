@@ -787,15 +787,71 @@ const CandidateProfile = () => {
               </Typography>
             </Box>
             <Box sx={{ height: '70vh', overflow: 'hidden' }}>
-              <iframe
-                src={`http://localhost:5000/api/resume/${candidate?.resume_blob_path}`}
-                title="Resume Preview"
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  border: 'none',
-                }}
-              />
+              {candidate?.resume_blob_path ? (
+                <>
+                  <Box sx={{ mb: 2, p: 1, bgcolor: 'grey.100', borderRadius: 1 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      Resume Path: {candidate.resume_blob_path}
+                    </Typography>
+                    <Box sx={{ mt: 1 }}>
+                      <a 
+                        href={`/api/resume/${candidate.resume_blob_path}`} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        style={{ color: 'blue', textDecoration: 'underline' }}
+                      >
+                        Open Resume in New Tab
+                      </a>
+                    </Box>
+                  </Box>
+                  {/* PDF Viewer with embed tag */}
+                  <Box sx={{ height: '100%', overflow: 'auto' }}>
+                    {/* Option 1: Try embed tag for PDF viewing */}
+                    <embed
+                      src={`${process.env.NODE_ENV === 'development' 
+                        ? 'http://localhost:8000' 
+                        : ''}/api/resume/${candidate.resume_blob_path}`}
+                      type="application/pdf"
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        border: 'none',
+                      }}
+                    />
+                    
+                    {/* Option 2: Direct PDF link */}
+                    <Box sx={{ mt: 2, textAlign: 'center' }}>
+                      <Typography variant="body2" color="text.secondary">
+                        If the PDF doesn't display above,{' '}
+                        <a 
+                          href={`${process.env.NODE_ENV === 'development' 
+                            ? 'http://localhost:8000' 
+                            : ''}/api/resume/${candidate.resume_blob_path}`} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          style={{ color: 'blue', textDecoration: 'underline' }}
+                        >
+                          click here to view in a new tab
+                        </a>
+                      </Typography>
+                    </Box>
+                  </Box>
+                </>
+              ) : (
+                <Box sx={{ 
+                  height: '100%', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  bgcolor: 'grey.50',
+                  border: '2px dashed grey.300',
+                  borderRadius: 2
+                }}>
+                  <Typography variant="body1" color="text.secondary">
+                    No resume file available
+                  </Typography>
+                </Box>
+              )}
             </Box>
           </CardContent>
         </Card>
