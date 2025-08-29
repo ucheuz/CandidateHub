@@ -11,15 +11,18 @@ import {
   MenuItem,
   Alert,
   Paper,
-  Typography
+  Typography,
+  CircularProgress
 } from '@mui/material';
 import { DataGrid, GridToolbar } from '@mui/x-data-grid';
 import { styled } from '@mui/material/styles';
 import AddIcon from '@mui/icons-material/Add';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import { collection, getDocs, query, where, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
+import axiosInstance from '../api/axiosInstance';
 
 dayjs.extend(relativeTime);
 
@@ -114,6 +117,7 @@ const CandidateList = () => {
   const [selectedJob, setSelectedJob] = useState(searchParams.get('jobId') || null);
   const [jobs, setJobs] = useState([]);
   const [statusFilter, setStatusFilter] = useState('active'); // 'active', 'rejected', 'all'
+  const [evaluatingCandidate, setEvaluatingCandidate] = useState(null);
 
   const columns = useMemo(() => [
     { 
@@ -135,19 +139,39 @@ const CandidateList = () => {
       }
     },
     { 
-      field: 'uploadDate', 
+      field: 'dateSubmitted', 
       headerName: 'Date Submitted', 
       flex: 1,
       valueGetter: (params) => {
-        const timestamp = params.row.upload_date;
-        if (!timestamp || !timestamp.seconds) return 'N/A';
-        return formatFirestoreTimestamp(timestamp);
+        const timestamp = params.row.date_submitted;
+        if (!timestamp) return 'N/A';
+        // Handle both ISO string and Firestore timestamp formats
+        if (typeof timestamp === 'string') {
+          return new Date(timestamp).toLocaleDateString();
+        } else if (timestamp && timestamp.seconds) {
+          return formatFirestoreTimestamp(timestamp);
+        }
+        return 'N/A';
       },
       sortComparator: (v1, v2, param1, param2) => {
-        const timestamp1 = param1.api.getCellValue(param1.id, 'upload_date');
-        const timestamp2 = param2.api.getCellValue(param2.id, 'upload_date');
-        const seconds1 = timestamp1?.seconds || 0;
-        const seconds2 = timestamp2?.seconds || 0;
+        const timestamp1 = param1.api.getCellValue(param1.id, 'date_submitted');
+        const timestamp2 = param2.api.getCellValue(param2.id, 'date_submitted');
+        
+        // Handle both ISO string and Firestore timestamp formats
+        let seconds1 = 0, seconds2 = 0;
+        
+        if (typeof timestamp1 === 'string') {
+          seconds1 = new Date(timestamp1).getTime() / 1000;
+        } else if (timestamp1 && timestamp1.seconds) {
+          seconds1 = timestamp1.seconds;
+        }
+        
+        if (typeof timestamp2 === 'string') {
+          seconds2 = new Date(timestamp2).getTime() / 1000;
+        } else if (timestamp2 && timestamp2.seconds) {
+          seconds2 = timestamp2.seconds;
+        }
+        
         return seconds1 - seconds2;
       }
     },
@@ -257,6 +281,8 @@ const CandidateList = () => {
       sortComparator: (v1, v2, param1, param2) => {
         // Define pipeline order
         const order = [
+          'NEW',
+          'EVALUATED',
           'Evaluated',
           'Phone Screen',
           'Interview 1',
@@ -278,6 +304,7 @@ const CandidateList = () => {
         // Map status to display names
         const statusDisplayMap = {
           'NEW': 'New',
+          'EVALUATED': 'Evaluated',
           'Evaluated': 'Evaluated',
           'Phone Screen': 'Screening',
           'Interview 1': 'Interview 1',
@@ -290,7 +317,7 @@ const CandidateList = () => {
         
         const stageColors = {
           'New': '#e3f2fd',        // Light blue
-          'Evaluated': '#e3f2fd',  // Light blue
+          'Evaluated': '#e8f5e9',  // Light green (different from New)
           'Screening': '#e3f2fd',  // Light blue
           'Interview 1': '#e8f5e9',
           'Interview 2': '#e8f5e9',
@@ -313,8 +340,93 @@ const CandidateList = () => {
           />
         );
       }
+    },
+    {
+      field: 'actions',
+      headerName: 'Actions',
+      width: 150,
+      sortable: false,
+      renderCell: (params) => {
+        const candidate = params.row;
+        const isNewCandidate = candidate.stage === 'NEW' || candidate.status === 'NEW';
+        const isEvaluated = candidate.evaluated === true;
+        
+        if (isNewCandidate && !isEvaluated) {
+          return (
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<PlayArrowIcon />}
+              onClick={() => handleEvaluateCandidate(candidate.id)}
+              disabled={evaluatingCandidate === candidate.id}
+              sx={{
+                bgcolor: '#0C3F05',
+                '&:hover': { bgcolor: '#0a2f04' },
+                fontSize: '0.75rem',
+                px: 2,
+                py: 0.5
+              }}
+            >
+              {evaluatingCandidate === candidate.id ? (
+                <CircularProgress size={16} sx={{ color: 'white' }} />
+              ) : (
+                'Evaluate'
+              )}
+            </Button>
+          );
+        }
+        
+        if (isEvaluated) {
+          return (
+            <Chip
+              label="Evaluated"
+              size="small"
+              color="success"
+              variant="outlined"
+              sx={{ fontSize: '0.75rem' }}
+            />
+          );
+        }
+        
+        return null;
+      }
     }
-  ], [navigate]);
+  ], [navigate, evaluatingCandidate]);
+
+  const handleEvaluateCandidate = async (candidateId) => {
+    try {
+      setEvaluatingCandidate(candidateId);
+      
+      const response = await axiosInstance.post(`/api/candidates/${candidateId}/evaluate`);
+      
+      if (response.status === 200) {
+        // Update the candidate in the local state
+        setCandidates(prevCandidates => 
+          prevCandidates.map(candidate => 
+            candidate.id === candidateId 
+              ? { 
+                  ...candidate, 
+                  evaluated: true,
+                  stage: 'EVALUATED',
+                  status: 'EVALUATED',
+                  evaluation: response.data.evaluation,
+                  cv_match_score: response.data.evaluation.match_score  // Update CV match score
+                }
+              : candidate
+          )
+        );
+        
+        // Show success message
+        setError(null);
+        console.log('Candidate evaluated successfully:', response.data);
+      }
+    } catch (error) {
+      console.error('Error evaluating candidate:', error);
+      setError('Failed to evaluate candidate. Please try again.');
+    } finally {
+      setEvaluatingCandidate(null);
+    }
+  };
 
   useEffect(() => {
     const fetchJobs = async () => {
@@ -356,15 +468,10 @@ const CandidateList = () => {
           // If no sentiment analysis exists, trigger analysis
           if (!data.feedback_sentiment) {
             try {
-              const response = await fetch(`/api/candidates/${doc.id}/sentiment-analysis`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json'
-                }
-              });
+              const response = await axiosInstance.post(`/api/candidates/${doc.id}/sentiment-analysis`);
               
-              if (response.ok) {
-                const sentimentData = await response.json();
+              if (response.status === 200) {
+                const sentimentData = response.data;
                 feedback = sentimentData.sentiment;
               }
             } catch (error) {
@@ -376,7 +483,8 @@ const CandidateList = () => {
           const formattedData = {
             id: doc.id,
             ...data,
-            name: formatName(data.name),
+            // Use the merged name field if it exists, otherwise combine firstName + lastName
+            name: data.name ? formatName(data.name) : formatName(`${data.firstName || ''} ${data.lastName || ''}`.trim()),
             feedback: feedback,
           };
           return formattedData;
@@ -426,7 +534,8 @@ const CandidateList = () => {
 
   // Calculate counts for each stage
   const stageCounts = {
-    NEW: candidates.filter(c => !c.status || c.status === 'NEW' || c.status === 'Evaluated').length,
+    NEW: candidates.filter(c => !c.status || c.status === 'NEW').length,
+    EVALUATED: candidates.filter(c => c.status === 'EVALUATED' || c.status === 'Evaluated').length,
     SCREENING: candidates.filter(c => c.status === 'Phone Screen').length,
     'INTERVIEW 1': candidates.filter(c => c.status === 'Interview 1').length,
     'INTERVIEW 2': candidates.filter(c => c.status === 'Interview 2').length,

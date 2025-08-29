@@ -46,7 +46,7 @@ import {
   Schedule as ScheduleIcon,
   Assignment as AssignmentIcon
 } from '@mui/icons-material';
-import axios from 'axios';
+import axiosInstance from '../api/axiosInstance';
 
 const SmartRecruitersSync = () => {
   const [activeTab, setActiveTab] = useState(0);
@@ -74,7 +74,7 @@ const SmartRecruitersSync = () => {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('/api/smartrecruiters/dashboard');
+      const response = await axiosInstance.get('/api/smartrecruiters/dashboard');
       if (response.data.success) {
         setDashboardData(response.data.dashboard);
       }
@@ -88,7 +88,7 @@ const SmartRecruitersSync = () => {
 
   const fetchJobs = async () => {
     try {
-      const response = await axios.get('/api/smartrecruiters/jobs');
+      const response = await axiosInstance.get('/api/smartrecruiters/jobs');
       if (response.data.success) {
         setJobs(response.data.jobs);
       }
@@ -100,7 +100,7 @@ const SmartRecruitersSync = () => {
 
   const fetchCandidates = async () => {
     try {
-      const response = await axios.get('/api/smartrecruiters/candidates');
+      const response = await axiosInstance.get('/api/smartrecruiters/candidates');
       if (response.data.success) {
         setCandidates(response.data.candidates);
       }
@@ -116,7 +116,7 @@ const SmartRecruitersSync = () => {
       setSyncDialog(true);
       setSyncResults(null);
 
-      const response = await axios.post('/api/smartrecruiters/force-sync', {
+      const response = await axiosInstance.post('/api/smartrecruiters/force-sync', {
         type: type
       });
 

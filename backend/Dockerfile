@@ -24,8 +24,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Make startup scripts executable
-RUN chmod +x startup.sh simple_startup.sh
+# Make startup script executable
+RUN chmod +x startup.sh
 
 # List files for debugging (including Firebase key)
 RUN ls -la /app/
@@ -39,5 +39,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:${WEBSITES_PORT:-8000}/health || exit 1
 
-# Use regular startup with resilient error handling
+# Use startup script
 CMD ["./startup.sh"]

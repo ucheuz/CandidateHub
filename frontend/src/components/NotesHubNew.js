@@ -23,6 +23,7 @@ import {
   Circle as CircleIcon,
   Groups as GroupsIcon,
 } from '@mui/icons-material';
+import axiosInstance from '../api/axiosInstance';
 
 const NotesHub = ({ candidateId, onNoteSaved }) => {
   const [notes, setNotes] = useState([]);
@@ -44,13 +45,13 @@ const NotesHub = ({ candidateId, onNoteSaved }) => {
   const fetchNotes = React.useCallback(async () => {
     try {
       const [notesResponse, feedbackResponse] = await Promise.all([
-        fetch(`/api/candidate/${candidateId}/notes`),
-        fetch(`/api/candidate/${candidateId}/feedback`)
+        axiosInstance.get(`/api/candidate/${candidateId}/notes`),
+        axiosInstance.get(`/api/candidate/${candidateId}/feedback`)
       ]);
       
-      if (notesResponse.ok && feedbackResponse.ok) {
-        const notesData = await notesResponse.json();
-        const feedbackData = await feedbackResponse.json();
+      if (notesResponse.status === 200 && feedbackResponse.status === 200) {
+        const notesData = notesResponse.data;
+        const feedbackData = feedbackResponse.data;
         
         setNotes(notesData.notes || []);
         setFeedback(feedbackData.feedback || []);
@@ -256,49 +257,36 @@ const NotesHub = ({ candidateId, onNoteSaved }) => {
       // Always send to backend (it will handle routing to notes or feedback)
       console.log('Saving to backend...');
       try {
-        const response = await fetch(`/api/candidate/${candidateId}/notes`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(noteData)
-        });
+        const response = await axiosInstance.post(`/api/candidate/${candidateId}/notes`, noteData);
         
         console.log('Response status:', response.status);
-        const responseText = await response.text();
-        console.log('Response text:', responseText);
+        console.log('Response data:', response.data);
         
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}, message: ${responseText}`);
+        if (response.status !== 201) {
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
         
-        let savedNote;
-        try {
-          savedNote = JSON.parse(responseText);
-          console.log('Note saved successfully:', savedNote);
-          
-          // Update the temporary message with the server response
-          setAllMessages(prev => prev.map(msg => 
-            msg.tempId === tempId ? { ...savedNote, messageType: shouldSave ? 'feedback' : 'note' } : msg
+        let savedNote = response.data;
+        console.log('Note saved successfully:', savedNote);
+        
+        // Update the temporary message with the server response
+        setAllMessages(prev => prev.map(msg => 
+          msg.tempId === tempId ? { ...savedNote, messageType: shouldSave ? 'feedback' : 'note' } : msg
+        ));
+        
+        if (shouldSave) {
+          setFeedback(prev => prev.map(fb => 
+            fb.tempId === tempId ? savedNote : fb
           ));
-          
-          if (shouldSave) {
-            setFeedback(prev => prev.map(fb => 
-              fb.tempId === tempId ? savedNote : fb
-            ));
-          } else {
-            setNotes(prev => prev.map(note => 
-              note.tempId === tempId ? savedNote : note
-            ));
-          }
-          
-          // Trigger sentiment analysis callback only for saved feedback notes
-          if (shouldSave && onNoteSaved && typeof onNoteSaved === 'function') {
-            onNoteSaved(savedNote);
-          }
-        } catch (e) {
-          console.error('Error parsing success response:', e);
-          throw new Error('Invalid response from server');
+        } else {
+          setNotes(prev => prev.map(note => 
+            note.tempId === tempId ? savedNote : note
+          ));
+        }
+        
+        // Trigger sentiment analysis callback only for saved feedback notes
+        if (shouldSave && onNoteSaved && typeof onNoteSaved === 'function') {
+          onNoteSaved(savedNote);
         }
       } catch (error) {
         console.error('Error saving note:', error);

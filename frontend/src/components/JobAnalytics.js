@@ -49,6 +49,7 @@ import {
   WorkOutline
 } from '@mui/icons-material';
 import { useParams } from 'react-router-dom';
+import axiosInstance from '../api/axiosInstance';
 
 // Modern gradient and vibrant colors for pipeline stages
 const PIPELINE_COLORS = [
@@ -104,9 +105,9 @@ const JobAnalytics = () => {
   useEffect(() => {
     const fetchJobAnalytics = async () => {
       try {
-        const response = await fetch(`/api/jobs/${jobId}/analytics`);
-        if (response.ok) {
-          const data = await response.json();
+        const response = await axiosInstance.get(`/api/jobs/${jobId}/analytics`);
+        if (response.status === 200) {
+          const data = response.data;
           setAnalytics(data);
         }
       } catch (error) {

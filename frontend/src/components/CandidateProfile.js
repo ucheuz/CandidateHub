@@ -101,38 +101,38 @@ const CandidateProfile = () => {
     setActiveTab(newValue);
   };
 
-  useEffect(() => {
-    const fetchCandidate = async () => {
-      try {
-        setLoading(true);
-        const response = await axiosInstance.get(`/api/candidates/${candidateId}`);
-        if (response.status !== 200) {
-          throw new Error('Failed to fetch candidate data');
-        }
-        const data = response.data;
-        setCandidate(data);
-        
-        // Fetch job information if candidate has a job_id
-        if (data.job_id) {
-          try {
-            const jobResponse = await axiosInstance.get(`/api/job/${data.job_id}`);
-            if (jobResponse.status === 200) {
-              const jobData = jobResponse.data;
-              setJob(jobData);
-            }
-          } catch (jobError) {
-            console.error('Error fetching job data:', jobError);
-            // Don't fail the whole component if job fetch fails
-          }
-        }
-      } catch (err) {
-        console.error('Error fetching candidate:', err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
+  const fetchCandidate = async () => {
+    try {
+      setLoading(true);
+      const response = await axiosInstance.get(`/api/candidates/${candidateId}`);
+      if (response.status !== 200) {
+        throw new Error('Failed to fetch candidate data');
       }
-    };
+      const data = response.data;
+      setCandidate(data);
+      
+      // Fetch job information if candidate has a job_id
+      if (data.job_id) {
+        try {
+          const jobResponse = await axiosInstance.get(`/api/job/${data.job_id}`);
+          if (jobResponse.status === 200) {
+            const jobData = jobResponse.data;
+            setJob(jobData);
+          }
+        } catch (jobError) {
+          console.error('Error fetching job data:', jobError);
+          // Don't fail the whole component if job fetch fails
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching candidate:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     if (candidateId) {
       fetchCandidate();
     }
@@ -452,7 +452,7 @@ const CandidateProfile = () => {
   };
 
   // Scorecard Section Component
-  const ScorecardSection = ({ skills, candidateId, title }) => {
+  const ScorecardSection = ({ skills, candidateId, title, onScorecardSubmitted }) => {
     const [ratings, setRatings] = useState(Array(skills.length).fill(0));
     const [submitting, setSubmitting] = useState(false);
     const [success, setSuccess] = useState(false);
@@ -504,6 +504,11 @@ const CandidateProfile = () => {
         if (response.status !== 201) throw new Error('Failed to submit scorecard');
         setSuccess(true);
         setAlreadySubmitted(true);
+        
+        // Refresh candidate data to show updated scorecard averages
+        if (onScorecardSubmitted) {
+          await onScorecardSubmitted();
+        }
       } catch (err) {
         setError(err.message);
       } finally {
@@ -589,7 +594,7 @@ const CandidateProfile = () => {
     );
   }
 
-  const isUnknownCandidate = candidate.name === 'Unknown Candidate';
+  const isUnknownCandidate = !candidate.name || candidate.name === 'Unknown Candidate';
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -608,13 +613,13 @@ const CandidateProfile = () => {
                   fontWeight: 'bold'
                 }}
               >
-                {candidate.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                {candidate.name ? candidate.name.split(' ').map(n => n[0]).join('').toUpperCase() : 'N/A'}
               </Avatar>
             </Grid>
             
             <Grid item xs={12} md={6}>
               <Typography variant="h3" sx={{ color: '#343a40', fontWeight: 'bold', mb: 1 }}>
-                {candidate.name}
+                {candidate.name || `${candidate.firstName || ''} ${candidate.lastName || ''}`.trim() || 'Unknown Candidate'}
               </Typography>
               
               <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
@@ -632,7 +637,7 @@ const CandidateProfile = () => {
                   }}
                 />
                 <Typography variant="body1" sx={{ color: '#6c757d' }}>
-                  Added {formatFirestoreTimestamp(candidate.upload_date)}
+                  Added {candidate.date_submitted ? new Date(candidate.date_submitted).toLocaleDateString() : 'N/A'}
                 </Typography>
               </Stack>
 
@@ -664,6 +669,15 @@ const CandidateProfile = () => {
                     </Typography>
                     <Typography variant="body2" sx={{ color: '#6c757d' }}>
                       CV Match Score
+                      {candidate.evaluated && candidate.evaluation && (
+                        <Chip 
+                          label="AI Evaluated" 
+                          size="small" 
+                          color="success" 
+                          variant="outlined" 
+                          sx={{ ml: 1, fontSize: '0.6rem' }}
+                        />
+                      )}
                     </Typography>
                   </Paper>
                 </Grid>
@@ -876,52 +890,66 @@ const CandidateProfile = () => {
                     Manager Rating:
                     <Rating value={candidate.managerRating || candidate.manager_rating || 0} readOnly sx={{ ml: 1, color: '#0C3F05' }} />
                   </Typography>
-                  {/* Departmental Skills Average based on all submitted interviewer scorecards */}
+                  {/* Departmental Skills Average - use stored average from backend (out of 5) */}
                   <Typography variant="subtitle2" sx={{ color: '#0C3F05', mb: 1 }}>
                     Departmental Skills Average:
-                    {(() => {
-                      // interviewer_scorecards: [{ type: 'departmental', ratings: [..], submittedBy: 'name' }]
-                      const scorecards = candidate.interviewer_scorecards?.filter(s => s.type === 'departmental' && Array.isArray(s.ratings) && s.ratings.length > 0) || [];
-                      if (scorecards.length === 0) {
-                        return <Chip label="N/A" sx={{ ml: 1, bgcolor: '#e0e0e0', color: '#666' }} />;
-                      }
-                      // Each scorecard: ratings is array of 1-5
-                      const allRatings = scorecards.flatMap(s => s.ratings);
-                      const avg = allRatings.length > 0 ? (allRatings.reduce((a, b) => a + b, 0) / allRatings.length) : 0;
-                      return <Chip label={avg.toFixed(2)} color="primary" sx={{ ml: 1 }} />;
-                    })()}
+                    {candidate.departmental_scorecard_avg ? (
+                      <Chip label={`${candidate.departmental_scorecard_avg.toFixed(2)}/5`} color="primary" sx={{ ml: 1 }} />
+                    ) : (
+                      <Chip label="N/A" sx={{ ml: 1, bgcolor: '#e0e0e0', color: '#666' }} />
+                    )}
                   </Typography>
-                  {/* Core Values Average based on all submitted interviewer scorecards */}
+                  {/* Core Values Average - use stored average from backend (out of 5) */}
                   <Typography variant="subtitle2" sx={{ color: '#0C3F05' }}>
                     IHS Core Values Average:
-                    {(() => {
-                      const scorecards = candidate.interviewer_scorecards?.filter(s => s.type === 'core_values' && Array.isArray(s.ratings) && s.ratings.length > 0) || [];
-                      if (scorecards.length === 0) {
-                        return <Chip label="N/A" sx={{ ml: 1, bgcolor: '#e0e0e0', color: '#666' }} />;
-                      }
-                      const allRatings = scorecards.flatMap(s => s.ratings);
-                      const avg = allRatings.length > 0 ? (allRatings.reduce((a, b) => a + b, 0) / allRatings.length) : 0;
-                      return <Chip label={avg.toFixed(2)} color="primary" sx={{ ml: 1 }} />;
-                    })()}
+                    {candidate.core_values_scorecard_avg ? (
+                      <Chip label={`${candidate.core_values_scorecard_avg.toFixed(2)}/5`} color="primary" sx={{ ml: 1 }} />
+                    ) : (
+                      <Chip label="N/A" sx={{ ml: 1, bgcolor: '#e0e0e0', color: '#666' }} />
+                    )}
                   </Typography>
-                  {/* Combined Average Calculation */}
+                  {/* Combined Average Calculation with Perfect Weighting */}
                   {(() => {
-                    // Gather all values, normalize to 0-5 scale for ratings, 0-100 for CV match
+                    // Perfect weighting system: each component contributes equally to reach max 100%
+                    // CV Match: 0-100 scale (25% weight)
+                    // Manager Rating: 1-5 scale converted to 0-100 (25% weight)  
+                    // Departmental Skills: 1-5 scale converted to 0-100 (25% weight)
+                    // Core Values: 1-5 scale converted to 0-100 (25% weight)
+                    
                     const cvMatch = typeof candidate.cv_match_score === 'number' ? candidate.cv_match_score : 0;
                     const managerRating = typeof (candidate.managerRating || candidate.manager_rating) === 'number' ? (candidate.managerRating || candidate.manager_rating) * 20 : 0;
-                    // Use interviewer_scorecards for averages
-                    const deptScorecards = candidate.interviewer_scorecards?.filter(s => s.type === 'departmental' && Array.isArray(s.ratings) && s.ratings.length > 0) || [];
-                    const deptAvg = (() => {
-                      const allRatings = deptScorecards.flatMap(s => s.ratings);
-                      return allRatings.length > 0 ? (allRatings.reduce((a, b) => a + b, 0) / allRatings.length) * 20 : 0;
-                    })();
-                    const coreScorecards = candidate.interviewer_scorecards?.filter(s => s.type === 'core_values' && Array.isArray(s.ratings) && s.ratings.length > 0) || [];
-                    const coreAvg = (() => {
-                      const allRatings = coreScorecards.flatMap(s => s.ratings);
-                      return allRatings.length > 0 ? (allRatings.reduce((a, b) => a + b, 0) / allRatings.length) * 20 : 0;
-                    })();
-                    const values = [cvMatch, managerRating, deptAvg, coreAvg].filter(v => v > 0);
-                    const combinedAvg = values.length > 0 ? (values.reduce((a, b) => a + b, 0) / values.length) : 0;
+                    
+                    // Scorecard averages are already in 1-5 scale, convert to 0-100
+                    const deptAvg = candidate.departmental_scorecard_avg ? (candidate.departmental_scorecard_avg / 5) * 100 : 0;
+                    const coreAvg = candidate.core_values_scorecard_avg ? (candidate.core_values_scorecard_avg / 5) * 100 : 0;
+                    
+                    // Calculate weighted average (each component gets equal weight)
+                    let totalWeight = 0;
+                    let weightedSum = 0;
+                    
+                    if (cvMatch > 0) {
+                      weightedSum += cvMatch * 0.25; // 25% weight
+                      totalWeight += 0.25;
+                    }
+                    
+                    if (managerRating > 0) {
+                      weightedSum += managerRating * 0.25; // 25% weight
+                      totalWeight += 0.25;
+                    }
+                    
+                    if (deptAvg > 0) {
+                      weightedSum += deptAvg * 0.25; // 25% weight
+                      totalWeight += 0.25;
+                    }
+                    
+                    if (coreAvg > 0) {
+                      weightedSum += coreAvg * 0.25; // 25% weight
+                      totalWeight += 0.25;
+                    }
+                    
+                    // Normalize by total weight to get percentage
+                    const combinedAvg = totalWeight > 0 ? (weightedSum / totalWeight) : 0;
+                    
                     return (
                       <Box sx={{ mt: 2, textAlign: 'center' }}>
                         <Divider sx={{ mb: 2 }} />
@@ -929,6 +957,7 @@ const CandidateProfile = () => {
                           Combined Candidate Match Average:
                           <Chip label={combinedAvg.toFixed(2) + '%'} color="primary" sx={{ ml: 1 }} />
                         </Typography>
+
                       </Box>
                     );
                   })()}
@@ -980,6 +1009,67 @@ const CandidateProfile = () => {
                 </Typography>
                 {candidate.evaluation ? (
                   <Box>
+                    {/* AI Evaluation Score Display */}
+                    <Box sx={{ 
+                      mb: 3, 
+                      p: 2, 
+                      bgcolor: '#f8f9fa', 
+                      borderRadius: 2, 
+                      border: '2px solid #e8f5e9',
+                      textAlign: 'center'
+                    }}>
+                      <Typography variant="h3" sx={{ color: '#0C3F05', fontWeight: 'bold', mb: 1 }}>
+                        {candidate.evaluation.match_score || candidate.cv_match_score || 0}%
+                      </Typography>
+                      <Typography variant="h6" sx={{ color: '#0C3F05', mb: 1 }}>
+                        AI Match Score
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Based on resume analysis and job requirements
+                      </Typography>
+                    </Box>
+                    
+                    {/* Scorecard Averages Display */}
+                    {(candidate.core_values_scorecard_avg || candidate.departmental_scorecard_avg) && (
+                      <Box sx={{ 
+                        mb: 3, 
+                        p: 2, 
+                        bgcolor: '#fff3e0', 
+                        borderRadius: 2, 
+                        border: '2px solid #ffb74d',
+                        textAlign: 'center'
+                      }}>
+                        <Typography variant="h6" sx={{ color: '#e65100', mb: 2 }}>
+                          Interviewer Scorecard Averages
+                        </Typography>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-around', flexWrap: 'wrap', gap: 2 }}>
+                          {candidate.core_values_scorecard_avg && (
+                            <Box>
+                              <Typography variant="h4" sx={{ color: '#e65100', fontWeight: 'bold' }}>
+                                {candidate.core_values_scorecard_avg}
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                Core Values
+                              </Typography>
+                            </Box>
+                          )}
+                          {candidate.departmental_scorecard_avg && (
+                            <Box>
+                              <Typography variant="h4" sx={{ color: '#e65100', fontWeight: 'bold' }}>
+                                {candidate.departmental_scorecard_avg}
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                Departmental Skills
+                              </Typography>
+                            </Box>
+                          )}
+                        </Box>
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 1, fontSize: '0.875rem' }}>
+                          Based on {candidate.interviewer_scorecards?.length || 0} scorecard(s)
+                        </Typography>
+                      </Box>
+                    )}
+                    
                     <Typography variant="body1" paragraph sx={{ lineHeight: 1.6 }}>
                       {/* Show only the part after 'Quick Assessment:' */}
                       {(() => {
@@ -1028,6 +1118,77 @@ const CandidateProfile = () => {
                         </Collapse>
                       </Box>
                     )}
+                    
+                    {/* AI Evaluation Strengths and Areas for Improvement */}
+                    {candidate.evaluation.strengths && candidate.evaluation.strengths.length > 0 && (
+                      <Box sx={{ mb: 3 }}>
+                        <Typography variant="h6" sx={{ color: '#0C3F05', mb: 2 }}>
+                          Key Strengths
+                        </Typography>
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                          {candidate.evaluation.strengths.map((strength, index) => (
+                            <Chip
+                              key={index}
+                              label={strength}
+                              color="success"
+                              variant="outlined"
+                              sx={{ 
+                                bgcolor: '#e8f5e9',
+                                borderColor: '#4caf50',
+                                color: '#2e7d32'
+                              }}
+                            />
+                          ))}
+                        </Box>
+                      </Box>
+                    )}
+                    
+                    {candidate.evaluation.areas_for_improvement && candidate.evaluation.areas_for_improvement.length > 0 && (
+                      <Box sx={{ mb: 3 }}>
+                        <Typography variant="h6" sx={{ color: '#0C3F05', mb: 2 }}>
+                          Areas for Improvement
+                        </Typography>
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                          {candidate.evaluation.areas_for_improvement.map((area, index) => (
+                            <Chip
+                              key={index}
+                              label={area}
+                              color="warning"
+                              variant="outlined"
+                              sx={{ 
+                                bgcolor: '#fff3e0',
+                                borderColor: '#ff9800',
+                                color: '#e65100'
+                              }}
+                            />
+                          ))}
+                        </Box>
+                      </Box>
+                    )}
+                    
+                    {/* AI Recommendation */}
+                    {candidate.evaluation.recommendation && (
+                      <Box sx={{ mb: 3 }}>
+                        <Typography variant="h6" sx={{ color: '#0C3F05', mb: 2 }}>
+                          AI Recommendation
+                        </Typography>
+                        <Box sx={{ 
+                          p: 2, 
+                          bgcolor: '#e3f2fd', 
+                          borderRadius: 2, 
+                          border: '1px solid #2196f3'
+                        }}>
+                          <Typography variant="body1" sx={{ 
+                            color: '#1565c0', 
+                            fontWeight: 500,
+                            fontStyle: 'italic'
+                          }}>
+                            "{candidate.evaluation.recommendation}"
+                          </Typography>
+                        </Box>
+                      </Box>
+                    )}
+                    
                     {/* Weighted Averages for Scorecards */}
                     <Divider sx={{ my: 2 }} />
                     <Box sx={{ mb: 2 }}>
@@ -1170,6 +1331,7 @@ const CandidateProfile = () => {
           skills={["Customer Focus", "Innovation", "Integrity", "Boldness", "Sustainability"]} 
           candidateId={candidate?.id} 
           title="IHS Core Values Scorecard"
+          onScorecardSubmitted={fetchCandidate}
         />
 
         {/* Departmental Skills Scorecard - shown if job has skills */}
@@ -1178,6 +1340,7 @@ const CandidateProfile = () => {
             skills={job.departmental_skills.filter(Boolean)} 
             candidateId={candidate?.id} 
             title="Departmental Skills Scorecard"
+            onScorecardSubmitted={fetchCandidate}
           />
         ) : (
           <Alert severity="info" sx={{ mt: 2 }}>
@@ -1425,7 +1588,7 @@ const CandidateProfile = () => {
                     <ListItemText
                       primary={<span style={{ fontWeight: 600 }}>Application Submitted</span>}
                       secondary={
-                        <span style={{ color: '#adb5bd', fontSize: 13 }}>{formatFirestoreTimestamp(candidate.upload_date)}</span>
+                        <span style={{ color: '#adb5bd', fontSize: 13 }}>{candidate.date_submitted ? new Date(candidate.date_submitted).toLocaleDateString() : 'N/A'}</span>
                       }
                     />
                   </ListItem>
@@ -1450,7 +1613,7 @@ const CandidateProfile = () => {
         <DialogContent>
           <Box textAlign="center" mb={3}>
             <Typography variant="h6" gutterBottom>
-              {candidate.name}
+              {candidate.name || `${candidate.firstName || ''} ${candidate.lastName || ''}`.trim() || 'Unknown Candidate'}
             </Typography>
             <Typography variant="h4" sx={{ color: '#333', fontWeight: 'bold' }}>
               {candidate.phone || 'No phone number available'}
@@ -1507,7 +1670,7 @@ const CandidateProfile = () => {
         <DialogTitle>Reject Candidate</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to reject {candidate.name}? Please select a reason for rejection.
+            Are you sure you want to reject {candidate.name || `${candidate.firstName || ''} ${candidate.lastName || ''}`.trim() || 'Unknown Candidate'}? Please select a reason for rejection.
           </DialogContentText>
           <Box sx={{ mt: 2 }}>
             <FormControl fullWidth margin="dense">

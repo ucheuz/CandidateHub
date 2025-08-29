@@ -87,7 +87,8 @@ const CareerPortal = () => {
     coverLetter: '',
     expectedSalary: '',
     noticePeriod: '',
-    source: 'career_portal'
+    pronouns: '',
+    source: 'Career Portal'
   });
   const [submitting, setSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
@@ -168,7 +169,7 @@ const CareerPortal = () => {
       
       // Create FormData for file upload
       const formData = new FormData();
-      formData.append('resume', applicationForm.resume);
+      formData.append('file', applicationForm.resume);  // Backend expects 'file' not 'resume'
       formData.append('job_id', selectedJob.id);
       formData.append('candidate_data', JSON.stringify({
         firstName: applicationForm.firstName,
@@ -179,17 +180,19 @@ const CareerPortal = () => {
         coverLetter: applicationForm.coverLetter,
         expectedSalary: applicationForm.expectedSalary,
         noticePeriod: applicationForm.noticePeriod,
-        source: applicationForm.source,
-        status: 'NEW'
+        pronouns: applicationForm.pronouns,
+        source: applicationForm.source
       }));
 
-      // Submit application
-      await axiosInstance.post('/api/candidates', formData, {
+      // Submit application using resume upload endpoint
+      const response = await axiosInstance.post('/api/resume/upload', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
       });
 
+      console.log('Application submitted successfully:', response.data);
+      
       setSubmitSuccess(true);
       setTimeout(() => {
         setApplicationDialog(false);
@@ -204,7 +207,8 @@ const CareerPortal = () => {
           coverLetter: '',
           expectedSalary: '',
           noticePeriod: '',
-          source: 'career_portal'
+          pronouns: '',
+          source: 'Career Portal'
         });
       }, 3000);
 
@@ -221,15 +225,35 @@ const CareerPortal = () => {
       setHrLoginLoading(true);
       setError(null);
       
-      // Directly initiate Microsoft SSO login
-      await instance.loginPopup(loginRequest);
+      console.log('Initiating Microsoft SSO login...');
+      console.log('MSAL instance:', instance);
+      console.log('Login request:', loginRequest);
       
-      // If successful, redirect to dashboard
-      navigate('/dashboard');
+      // Check if MSAL is properly initialized
+      if (!instance) {
+        throw new Error('MSAL instance not available');
+      }
+      
+      // Try popup first, fallback to redirect if popup fails
+      try {
+        // Directly initiate Microsoft SSO login with popup
+        const response = await instance.loginPopup(loginRequest);
+        console.log('Login successful:', response);
+        
+        // If successful, redirect to dashboard
+        navigate('/dashboard');
+      } catch (popupError) {
+        console.log('Popup login failed, trying redirect:', popupError);
+        
+        // Fallback to redirect if popup fails (e.g., popup blocked)
+        await instance.loginRedirect(loginRequest);
+        // Note: With redirect, the page will reload and handle the response
+        // The user will be redirected back to the app after login
+      }
       
     } catch (err) {
       console.error('Microsoft login error:', err);
-      setError('HR login failed. Please try again.');
+      setError(`HR login failed: ${err.message || 'Please try again.'}`);
     } finally {
       setHrLoginLoading(false);
     }
@@ -943,6 +967,16 @@ const CareerPortal = () => {
                   required
                 />
               </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Pronouns (Optional)"
+                  value={applicationForm.pronouns}
+                  onChange={(e) => handleInputChange('pronouns', e.target.value)}
+                  placeholder="e.g., she/her, he/him, they/them, or leave blank"
+                  helperText="This helps us provide respectful and accurate analysis"
+                />
+              </Grid>
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
@@ -1017,7 +1051,7 @@ const CareerPortal = () => {
                   coverLetter: '',
                   expectedSalary: '',
                   noticePeriod: '',
-                  source: 'career_portal'
+                  source: 'Career Portal'
                 });
               }}
               sx={{

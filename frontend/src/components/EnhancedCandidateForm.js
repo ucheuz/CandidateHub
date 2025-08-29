@@ -45,7 +45,7 @@ import {
   Assignment as AssignmentIcon
 } from '@mui/icons-material';
 import { useParams, useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import axiosInstance from '../api/axiosInstance';
 
 const EnhancedCandidateForm = () => {
   const { jobId } = useParams();
@@ -133,12 +133,12 @@ const EnhancedCandidateForm = () => {
       setLoading(true);
       
       // Fetch job data
-      const jobResponse = await axios.get(`/api/job/${jobId}`);
+      const jobResponse = await axiosInstance.get(`/api/job/${jobId}`);
       setJobData(jobResponse.data);
       
       // If job has SmartRecruiters integration, fetch configuration
       if (jobResponse.data.smartrecruiters?.enabled && jobResponse.data.smartrecruiters?.posting_uuid) {
-        const configResponse = await axios.get(
+        const configResponse = await axiosInstance.get(
           `/api/smartrecruiters/posting/${jobResponse.data.smartrecruiters.posting_uuid}/config`
         );
         if (configResponse.data.success) {
@@ -203,7 +203,7 @@ const EnhancedCandidateForm = () => {
       formData.append('file', file);
       formData.append('job_id', jobId);
 
-      const response = await axios.post('/api/resume/upload', formData, {
+              const response = await axiosInstance.post('/api/resume/upload', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -260,7 +260,7 @@ const EnhancedCandidateForm = () => {
       setError('');
 
       // Create candidate in CandidateHub
-      const candidateResponse = await axios.post('/api/candidates', {
+              const candidateResponse = await axiosInstance.post('/api/candidates', {
         ...candidateData,
         job_id: jobId
       });
@@ -273,7 +273,7 @@ const EnhancedCandidateForm = () => {
           setSyncStatus('syncing');
           
           try {
-            const syncResponse = await axios.post('/api/smartrecruiters/sync-candidate', {
+            const syncResponse = await axiosInstance.post('/api/smartrecruiters/sync-candidate', {
               candidate_data: {
                 ...candidateData,
                 id: candidateId

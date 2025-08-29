@@ -46,20 +46,48 @@ import {
 import { useNavigate } from 'react-router-dom';
 import axiosInstance from '../api/axiosInstance';
 
-const COLORS = ['#0274B3', '#4FC3F7', '#81C784', '#FFB74D', '#F06292', '#BA68C8'];
+// IHS Brand Colors
+const IHS_COLORS = {
+  primary: '#0C3F05',      // Dark Green (IHS Primary)
+  secondary: '#4CAF50',    // Medium Green
+  accent: '#8BC34A',       // Light Green
+  blue: '#0274B3',         // IHS Blue
+  lightBlue: '#4FC3F7',    // Light Blue
+  orange: '#FF9800',       // Orange
+  red: '#F44336',          // Red
+  purple: '#9C27B0',       // Purple
+  gray: '#757575',         // Gray
+  lightGray: '#F5F5F5'     // Light Gray
+};
 
-const MetricCard = ({ title, value, subtitle, icon, color = '#0274B3', trend = null }) => (
-  <Card sx={{ height: '100%', background: `linear-gradient(135deg, ${color}15 0%, ${color}05 100%)` }}>
-    <CardContent>
+const COLORS = [IHS_COLORS.primary, IHS_COLORS.blue, IHS_COLORS.secondary, IHS_COLORS.orange, IHS_COLORS.purple, IHS_COLORS.red];
+
+const MetricCard = ({ title, value, subtitle, icon, color = IHS_COLORS.primary, trend = null }) => (
+  <Card sx={{ 
+    height: '100%', 
+    background: 'white',
+    borderRadius: 3,
+    boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+    border: '1px solid rgba(0,0,0,0.05)',
+    transition: 'all 0.3s ease-in-out',
+    '&:hover': {
+      transform: 'translateY(-4px)',
+      boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
+      borderColor: color
+    }
+  }}>
+    <CardContent sx={{ p: 3 }}>
       <Box display="flex" alignItems="center" justifyContent="space-between">
-        <Box>
+        <Box sx={{ flex: 1 }}>
           <Typography 
-            variant="h4" 
+            variant="h3" 
             component="div" 
             sx={{ 
-              fontWeight: 'bold', 
-              color,
-              fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' }
+              fontWeight: 800, 
+              color: color,
+              fontSize: { xs: '1.75rem', sm: '2.25rem', md: '2.5rem' },
+              mb: 1,
+              lineHeight: 1.1
             }}
           >
             {value}
@@ -69,7 +97,9 @@ const MetricCard = ({ title, value, subtitle, icon, color = '#0274B3', trend = n
             component="div" 
             sx={{ 
               mb: 1,
-              fontSize: { xs: '0.9rem', sm: '1rem', md: '1.25rem' }
+              fontSize: { xs: '1rem', sm: '1.125rem', md: '1.25rem' },
+              fontWeight: 600,
+              color: IHS_COLORS.primary
             }}
           >
             {title}
@@ -78,18 +108,28 @@ const MetricCard = ({ title, value, subtitle, icon, color = '#0274B3', trend = n
             <Typography 
               variant="body2" 
               color="text.secondary"
-              sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+              sx={{ 
+                fontSize: { xs: '0.875rem', sm: '0.9rem' },
+                fontWeight: 500
+              }}
             >
               {subtitle}
             </Typography>
           )}
           {trend && (
-            <Box display="flex" alignItems="center" mt={1}>
-              <TrendingUp sx={{ fontSize: { xs: 14, sm: 16 }, color: trend > 0 ? 'success.main' : 'error.main', mr: 0.5 }} />
+            <Box display="flex" alignItems="center" mt={2}>
+              <TrendingUp sx={{ 
+                fontSize: { xs: 16, sm: 18 }, 
+                color: trend > 0 ? IHS_COLORS.secondary : IHS_COLORS.red, 
+                mr: 1 
+              }} />
               <Typography 
                 variant="caption" 
-                color={trend > 0 ? 'success.main' : 'error.main'}
-                sx={{ fontSize: { xs: '0.65rem', sm: '0.75rem' } }}
+                color={trend > 0 ? IHS_COLORS.secondary : IHS_COLORS.red}
+                sx={{ 
+                  fontSize: { xs: '0.75rem', sm: '0.8rem' },
+                  fontWeight: 600
+                }}
               >
                 {trend > 0 ? '+' : ''}{trend}% from last week
               </Typography>
@@ -98,8 +138,12 @@ const MetricCard = ({ title, value, subtitle, icon, color = '#0274B3', trend = n
         </Box>
         <Avatar sx={{ 
           bgcolor: color, 
-          width: { xs: 40, sm: 48, md: 56 }, 
-          height: { xs: 40, sm: 48, md: 56 }
+          width: { xs: 48, sm: 56, md: 64 }, 
+          height: { xs: 48, sm: 56, md: 64 },
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          '& .MuiSvgIcon-root': {
+            fontSize: { xs: '1.5rem', sm: '1.75rem', md: '2rem' }
+          }
         }}>
           {icon}
         </Avatar>
@@ -148,7 +192,13 @@ const Dashboard = () => {
     );
   }
 
-  const { overview, stageDistribution, jobMetrics, trends } = analytics;
+  // Safely destructure analytics data with fallbacks
+  const { 
+    overview = {}, 
+    stageDistribution = {}, 
+    jobMetrics = [], 
+    trends = {} 
+  } = analytics || {};
   
   // Debug logging for analytics data (development only)
   if (process.env.NODE_ENV === 'development') {
@@ -159,94 +209,111 @@ const Dashboard = () => {
     console.log('Trends:', trends);
   }
 
-  // Prepare chart data
-  const stageData = Object.entries(stageDistribution).map(([stage, count]) => ({
-    name: stage.replace('_', ' '),
-    value: count,
-    percentage: ((count / overview.totalCandidates) * 100).toFixed(1)
-  }));
+  // Prepare chart data with defensive programming
+  const stageData = stageDistribution && typeof stageDistribution === 'object' 
+    ? Object.entries(stageDistribution).map(([stage, count]) => ({
+        name: stage.replace('_', ' '),
+        value: count,
+        percentage: ((count / (overview.totalCandidates || 1)) * 100).toFixed(1)
+      }))
+    : [];
 
   const matchScoreData = ['excellent', 'good', 'fair', 'poor'].map(category => ({
     category: category.charAt(0).toUpperCase() + category.slice(1),
-    count: trends.matchScoreDistribution[category] || 0,
-    percentage: (((trends.matchScoreDistribution[category] || 0) / overview.totalCandidates) * 100).toFixed(1)
+    count: (trends?.matchScoreDistribution?.[category]) || 0,
+    percentage: (((trends?.matchScoreDistribution?.[category] || 0) / (overview?.totalCandidates || 1)) * 100).toFixed(1)
   }));
 
-  const topJobs = jobMetrics
-    .sort((a, b) => b.candidateCount - a.candidateCount)
-    .slice(0, 5);
+  const topJobs = Array.isArray(jobMetrics) && jobMetrics.length > 0
+    ? jobMetrics
+        .sort((a, b) => b.candidateCount - a.candidateCount)
+        .slice(0, 5)
+    : [];
 
   // Source of Hire data
   const sourceOfHireData = [
-    { name: 'LinkedIn', value: analytics.sourceOfHire?.linkedin || 0, color: '#0077B5' },
-    { name: 'Referral', value: analytics.sourceOfHire?.referral || 0, color: '#4CAF50' },
-    { name: 'SmartRecruiter', value: analytics.sourceOfHire?.smartrecruiter || 0, color: '#FF9800' },
-    { name: 'Direct Application', value: analytics.sourceOfHire?.direct || 0, color: '#9C27B0' },
-    { name: 'Job Board', value: analytics.sourceOfHire?.jobboard || 0, color: '#F44336' }
+    { name: 'LinkedIn', value: analytics?.sourceOfHire?.linkedin || 0, color: '#0077B5' },
+    { name: 'Referral', value: analytics?.sourceOfHire?.referral || 0, color: '#4CAF50' },
+    { name: 'SmartRecruiter', value: analytics?.sourceOfHire?.smartrecruiter || 0, color: '#FF9800' },
+    { name: 'Direct Application', value: analytics?.sourceOfHire?.direct || 0, color: '#9C27B0' },
+    { name: 'Job Board', value: analytics?.sourceOfHire?.jobboard || 0, color: '#F44336' }
   ].filter(item => item.value > 0);
 
   // Rejection Reasons data - standardized reasons matching the hiring pipeline
   const rejectionReasonsData = [
-    { reason: 'Did not fit company culture', count: analytics.rejectionReasons?.culture || 0 },
-    { reason: 'Did not meet desired qualifications', count: analytics.rejectionReasons?.desiredQualifications || 0 },
-    { reason: 'Did not meet minimum qualifications', count: analytics.rejectionReasons?.minimumQualifications || 0 },
-    { reason: 'Did not meet screening requirements', count: analytics.rejectionReasons?.screeningRequirements || 0 },
-    { reason: 'Incomplete application', count: analytics.rejectionReasons?.incompleteApplication || 0 },
-    { reason: 'Ineligible to work in location', count: analytics.rejectionReasons?.ineligibleLocation || 0 },
-    { reason: 'Misrepresented qualifications', count: analytics.rejectionReasons?.misrepresented || 0 },
-    { reason: 'More qualified candidate selected', count: analytics.rejectionReasons?.moreQualified || 0 },
-    { reason: 'No show for interview', count: analytics.rejectionReasons?.noShow || 0 },
-    { reason: 'Unresponsive', count: analytics.rejectionReasons?.unresponsive || 0 },
-    { reason: 'High Remuneration Expectations', count: analytics.rejectionReasons?.highSalary || 0 },
-    { reason: 'Overqualified', count: analytics.rejectionReasons?.overqualified || 0 },
-    { reason: 'Background Checks', count: analytics.rejectionReasons?.backgroundCheck || 0 },
-    { reason: 'Unsuccessful Skills Assessment', count: analytics.rejectionReasons?.skillsAssessment || 0 },
-    { reason: 'Other', count: analytics.rejectionReasons?.other || 0 }
+    { reason: 'Did not fit company culture', count: analytics?.rejectionReasons?.culture || 0 },
+    { reason: 'Did not meet desired qualifications', count: analytics?.rejectionReasons?.desiredQualifications || 0 },
+    { reason: 'Did not meet minimum qualifications', count: analytics?.rejectionReasons?.minimumQualifications || 0 },
+    { reason: 'Did not meet screening requirements', count: analytics?.rejectionReasons?.screeningRequirements || 0 },
+    { reason: 'Incomplete application', count: analytics?.rejectionReasons?.incompleteApplication || 0 },
+    { reason: 'Ineligible to work in location', count: analytics?.rejectionReasons?.ineligibleLocation || 0 },
+    { reason: 'Misrepresented qualifications', count: analytics?.rejectionReasons?.misrepresented || 0 },
+    { reason: 'More qualified candidate selected', count: analytics?.rejectionReasons?.moreQualified || 0 },
+    { reason: 'No show for interview', count: analytics?.rejectionReasons?.noShow || 0 },
+    { reason: 'Unresponsive', count: analytics?.rejectionReasons?.unresponsive || 0 },
+    { reason: 'High Remuneration Expectations', count: analytics?.rejectionReasons?.highSalary || 0 },
+    { reason: 'Overqualified', count: analytics?.rejectionReasons?.overqualified || 0 },
+    { reason: 'Background Checks', count: analytics?.rejectionReasons?.backgroundCheck || 0 },
+    { reason: 'Unsuccessful Skills Assessment', count: analytics?.rejectionReasons?.skillsAssessment || 0 },
+    { reason: 'Other', count: analytics?.rejectionReasons?.other || 0 }
   ].filter(item => item.count > 0);
 
   // Debug logging for rejection reasons (development only)
   if (process.env.NODE_ENV === 'development') {
     console.log('=== Dashboard Rejection Reasons Debug ===');
-    console.log('Analytics rejection reasons:', analytics.rejectionReasons);
+    console.log('Analytics rejection reasons:', analytics?.rejectionReasons);
     console.log('Filtered rejection reasons data:', rejectionReasonsData);
   }
 
   // Time to Hire data (in days)
   const timeToHireData = [
-    { period: '0-7 days', count: analytics.timeToHire?.week1 || 0 },
-    { period: '8-14 days', count: analytics.timeToHire?.week2 || 0 },
-    { period: '15-30 days', count: analytics.timeToHire?.month1 || 0 },
-    { period: '31-60 days', count: analytics.timeToHire?.month2 || 0 },
-    { period: '60+ days', count: analytics.timeToHire?.beyond || 0 }
+    { period: '0-7 days', count: analytics?.timeToHire?.week1 || 0 },
+    { period: '8-14 days', count: analytics?.timeToHire?.week2 || 0 },
+    { period: '15-30 days', count: analytics?.timeToHire?.month1 || 0 },
+    { period: '31-60 days', count: analytics?.timeToHire?.month2 || 0 },
+    { period: '60+ days', count: analytics?.timeToHire?.beyond || 0 }
   ];
 
   return (
-    <Container maxWidth="xl" sx={{ mt: { xs: 2, sm: 3, md: 4 }, mb: { xs: 2, sm: 3, md: 4 }, px: { xs: 2, sm: 3 } }}>
-      {/* Header */}
-      <Box mb={{ xs: 2, sm: 3, md: 4 }}>
-        <Typography 
-          variant="h4" 
-          component="h1" 
-          gutterBottom 
-          sx={{ 
-            fontWeight: 'bold',
-            fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' },
-            textAlign: { xs: 'center', sm: 'left' }
-          }}
-        >
-          HR Dashboard
-        </Typography>
-        <Typography 
-          variant="subtitle1" 
-          color="text.secondary"
-          sx={{ 
-            fontSize: { xs: '0.875rem', sm: '1rem' },
-            textAlign: { xs: 'center', sm: 'left' }
-          }}
-        >
-          Comprehensive view of your recruitment pipeline
-        </Typography>
-      </Box>
+    <Box sx={{ 
+      background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
+      minHeight: '100vh',
+      py: 4
+    }}>
+      <Container maxWidth="xl">
+        {/* Modern Dashboard Header */}
+        <Box sx={{ 
+          mb: 4, 
+          textAlign: 'center',
+          background: 'white',
+          borderRadius: 4,
+          p: 4,
+          boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+          border: '1px solid rgba(0,0,0,0.05)'
+        }}>
+          <Typography 
+            variant="h3" 
+            sx={{ 
+              fontWeight: 800, 
+              color: IHS_COLORS.primary,
+              mb: 2,
+              fontSize: { xs: '1.75rem', sm: '2.25rem', md: '3rem' }
+            }}
+          >
+            IHS Recruitment Dashboard
+          </Typography>
+          <Typography 
+            variant="h6" 
+            sx={{ 
+              color: IHS_COLORS.gray,
+              fontWeight: 500,
+              maxWidth: '600px',
+              mx: 'auto'
+            }}
+          >
+            Comprehensive overview of your recruitment pipeline, candidate analytics, and hiring performance
+          </Typography>
+        </Box>
 
       {/* Overview Metrics */}
       <Grid container spacing={{ xs: 2, sm: 3 }} mb={{ xs: 2, sm: 3, md: 4 }}>
@@ -291,11 +358,23 @@ const Dashboard = () => {
       <Grid container spacing={{ xs: 2, sm: 3 }}>
         {/* Pipeline Distribution */}
         <Grid item xs={12} lg={6}>
-          <Paper sx={{ p: { xs: 2, sm: 3 }, height: { xs: 350, sm: 400 } }}>
+          <Paper sx={{ 
+            p: { xs: 3, sm: 4 }, 
+            height: { xs: 350, sm: 400 },
+            borderRadius: 3,
+            boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+            border: '1px solid rgba(0,0,0,0.05)',
+            background: 'white'
+          }}>
             <Typography 
               variant="h6" 
               gutterBottom
-              sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}
+              sx={{ 
+                fontSize: { xs: '1.1rem', sm: '1.25rem' },
+                fontWeight: 700,
+                color: IHS_COLORS.primary,
+                mb: 2
+              }}
             >
               Hiring Pipeline Distribution
             </Typography>
@@ -321,11 +400,23 @@ const Dashboard = () => {
 
         {/* Match Score Distribution */}
         <Grid item xs={12} lg={6}>
-          <Paper sx={{ p: { xs: 2, sm: 3 }, height: { xs: 350, sm: 400 } }}>
+          <Paper sx={{ 
+            p: { xs: 3, sm: 4 }, 
+            height: { xs: 350, sm: 400 },
+            borderRadius: 3,
+            boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+            border: '1px solid rgba(0,0,0,0.05)',
+            background: 'white'
+          }}>
             <Typography 
               variant="h6" 
               gutterBottom
-              sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}
+              sx={{ 
+                fontSize: { xs: '1.1rem', sm: '1.25rem' },
+                fontWeight: 700,
+                color: IHS_COLORS.primary,
+                mb: 2
+              }}
             >
               CV Match Score Distribution
             </Typography>
@@ -342,11 +433,22 @@ const Dashboard = () => {
 
         {/* Top Performing Jobs */}
         <Grid item xs={12} md={8}>
-          <Paper sx={{ p: { xs: 2, sm: 3 } }}>
+          <Paper sx={{ 
+            p: { xs: 3, sm: 4 },
+            borderRadius: 3,
+            boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+            border: '1px solid rgba(0,0,0,0.05)',
+            background: 'white'
+          }}>
             <Typography 
               variant="h6" 
               gutterBottom
-              sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}
+              sx={{ 
+                fontSize: { xs: '1.1rem', sm: '1.25rem' },
+                fontWeight: 700,
+                color: IHS_COLORS.primary,
+                mb: 2
+              }}
             >
               Top Performing Jobs
             </Typography>
@@ -357,17 +459,29 @@ const Dashboard = () => {
                     button
                     onClick={() => navigate(`/job/${job.id}/candidates`)}
                     sx={{
-                      '&:hover': { backgroundColor: 'action.hover' },
-                      borderRadius: 1,
-                      px: { xs: 1, sm: 2 }
+                      '&:hover': { 
+                        backgroundColor: IHS_COLORS.lightGray,
+                        transform: 'translateX(4px)'
+                      },
+                      borderRadius: 2,
+                      px: { xs: 2, sm: 3 },
+                      py: 1.5,
+                      transition: 'all 0.3s ease-in-out',
+                      border: '1px solid transparent',
+                      '&:hover': {
+                        borderColor: IHS_COLORS.primary,
+                        backgroundColor: IHS_COLORS.lightGray
+                      }
                     }}
                   >
                     <ListItemAvatar>
                       <Avatar sx={{ 
                         bgcolor: COLORS[index % COLORS.length],
-                        width: { xs: 32, sm: 40 },
-                        height: { xs: 32, sm: 40 },
-                        fontSize: { xs: '0.875rem', sm: '1rem' }
+                        width: { xs: 36, sm: 44 },
+                        height: { xs: 36, sm: 44 },
+                        fontSize: { xs: '0.9rem', sm: '1rem' },
+                        fontWeight: 700,
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
                       }}>
                         {index + 1}
                       </Avatar>
@@ -376,7 +490,11 @@ const Dashboard = () => {
                       primary={
                         <Typography 
                           variant="body1" 
-                          sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}
+                          sx={{ 
+                            fontSize: { xs: '0.9rem', sm: '1rem' },
+                            fontWeight: 600,
+                            color: IHS_COLORS.primary
+                          }}
                         >
                           {job.title}
                         </Typography>
@@ -392,23 +510,39 @@ const Dashboard = () => {
                           <Chip
                             label={`${job.candidateCount} candidates`}
                             size="small"
-                            color="primary"
-                            variant="outlined"
-                            sx={{ fontSize: { xs: '0.65rem', sm: '0.75rem' } }}
+                            sx={{ 
+                              fontSize: { xs: '0.7rem', sm: '0.75rem' },
+                              fontWeight: 600,
+                              bgcolor: IHS_COLORS.blue + '15',
+                              color: IHS_COLORS.blue,
+                              borderColor: IHS_COLORS.blue
+                            }}
                           />
                           <Chip
                             label={`${(job.avgMatchScore || 0).toFixed(1)}% avg match`}
                             size="small"
-                            color="success"
-                            variant="outlined"
-                            sx={{ fontSize: { xs: '0.65rem', sm: '0.75rem' } }}
+                            sx={{ 
+                              fontSize: { xs: '0.7rem', sm: '0.75rem' },
+                              fontWeight: 600,
+                              bgcolor: IHS_COLORS.secondary + '15',
+                              color: IHS_COLORS.secondary,
+                              borderColor: IHS_COLORS.secondary
+                            }}
                           />
                         </Box>
                       }
                     />
                     <Box display="flex" alignItems="center">
                       <Tooltip title="View candidates">
-                        <IconButton size="small">
+                        <IconButton 
+                          size="small"
+                          sx={{
+                            color: IHS_COLORS.primary,
+                            '&:hover': {
+                              bgcolor: IHS_COLORS.primary + '15'
+                            }
+                          }}
+                        >
                           <Star />
                         </IconButton>
                       </Tooltip>
@@ -423,25 +557,57 @@ const Dashboard = () => {
 
         {/* Quick Actions */}
         <Grid item xs={12} md={4}>
-          <Paper sx={{ p: { xs: 2, sm: 3 } }}>
+          <Paper sx={{ 
+            p: { xs: 3, sm: 4 },
+            borderRadius: 3,
+            boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+            border: '1px solid rgba(0,0,0,0.05)',
+            background: 'white'
+          }}>
             <Typography 
               variant="h6" 
               gutterBottom
-              sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}
+              sx={{ 
+                fontSize: { xs: '1.1rem', sm: '1.25rem' },
+                fontWeight: 700,
+                color: IHS_COLORS.primary,
+                mb: 2
+              }}
             >
               Quick Actions
             </Typography>
             <Box display="flex" flexDirection="column" gap={2}>
               <Card
-                sx={{ cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
+                sx={{ 
+                  cursor: 'pointer', 
+                  borderRadius: 2,
+                  border: '1px solid rgba(0,0,0,0.05)',
+                  transition: 'all 0.3s ease-in-out',
+                  '&:hover': { 
+                    transform: 'translateY(-2px)',
+                    boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
+                    borderColor: IHS_COLORS.primary
+                  } 
+                }}
                 onClick={() => navigate('/jobs/new')}
               >
-                <CardContent sx={{ py: { xs: 1.5, sm: 2 } }}>
+                <CardContent sx={{ py: { xs: 2, sm: 2.5 } }}>
                   <Box display="flex" alignItems="center">
-                    <Work sx={{ mr: 2, color: 'primary.main', fontSize: { xs: 20, sm: 24 } }} />
+                    <Avatar sx={{ 
+                      bgcolor: IHS_COLORS.blue, 
+                      mr: 2, 
+                      width: 32, 
+                      height: 32 
+                    }}>
+                      <Work sx={{ fontSize: 18 }} />
+                    </Avatar>
                     <Typography 
                       variant="body1"
-                      sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}
+                      sx={{ 
+                        fontSize: { xs: '0.9rem', sm: '1rem' },
+                        fontWeight: 600,
+                        color: IHS_COLORS.primary
+                      }}
                     >
                       Post New Job
                     </Typography>
@@ -450,15 +616,36 @@ const Dashboard = () => {
               </Card>
               
               <Card
-                sx={{ cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
+                sx={{ 
+                  cursor: 'pointer', 
+                  borderRadius: 2,
+                  border: '1px solid rgba(0,0,0,0.05)',
+                  transition: 'all 0.3s ease-in-out',
+                  '&:hover': { 
+                    transform: 'translateY(-2px)',
+                    boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
+                    borderColor: IHS_COLORS.secondary
+                  } 
+                }}
                 onClick={() => navigate('/job-selection')}
               >
-                <CardContent sx={{ py: { xs: 1.5, sm: 2 } }}>
+                <CardContent sx={{ py: { xs: 2, sm: 2.5 } }}>
                   <Box display="flex" alignItems="center">
-                    <People sx={{ mr: 2, color: 'primary.main', fontSize: { xs: 20, sm: 24 } }} />
+                    <Avatar sx={{ 
+                      bgcolor: IHS_COLORS.secondary, 
+                      mr: 2, 
+                      width: 32, 
+                      height: 32 
+                    }}>
+                      <People sx={{ fontSize: 18 }} />
+                    </Avatar>
                     <Typography 
                       variant="body1"
-                      sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}
+                      sx={{ 
+                        fontSize: { xs: '0.9rem', sm: '1rem' },
+                        fontWeight: 600,
+                        color: IHS_COLORS.primary
+                      }}
                     >
                       Add Candidate
                     </Typography>
@@ -467,15 +654,36 @@ const Dashboard = () => {
               </Card>
               
               <Card
-                sx={{ cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
+                sx={{ 
+                  cursor: 'pointer', 
+                  borderRadius: 2,
+                  border: '1px solid rgba(0,0,0,0.05)',
+                  transition: 'all 0.3s ease-in-out',
+                  '&:hover': { 
+                    transform: 'translateY(-2px)',
+                    boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
+                    borderColor: IHS_COLORS.accent
+                  } 
+                }}
                 onClick={() => navigate('/candidates')}
               >
-                <CardContent sx={{ py: { xs: 1.5, sm: 2 } }}>
+                <CardContent sx={{ py: { xs: 2, sm: 2.5 } }}>
                   <Box display="flex" alignItems="center">
-                    <Assessment sx={{ mr: 2, color: 'primary.main', fontSize: { xs: 20, sm: 24 } }} />
+                    <Avatar sx={{ 
+                      bgcolor: IHS_COLORS.accent, 
+                      mr: 2, 
+                      width: 32, 
+                      height: 32 
+                    }}>
+                      <Assessment sx={{ fontSize: 18 }} />
+                    </Avatar>
                     <Typography 
                       variant="body1"
-                      sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}
+                      sx={{ 
+                        fontSize: { xs: '0.9rem', sm: '1rem' },
+                        fontWeight: 600,
+                        color: IHS_COLORS.primary
+                      }}
                     >
                       View All Candidates
                     </Typography>
@@ -484,15 +692,36 @@ const Dashboard = () => {
               </Card>
               
               <Card
-                sx={{ cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
+                sx={{ 
+                  cursor: 'pointer', 
+                  borderRadius: 2,
+                  border: '1px solid rgba(0,0,0,0.05)',
+                  transition: 'all 0.3s ease-in-out',
+                  '&:hover': { 
+                    transform: 'translateY(-2px)',
+                    boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
+                    borderColor: IHS_COLORS.orange
+                  } 
+                }}
                 onClick={() => navigate('/jobs')}
               >
-                <CardContent sx={{ py: { xs: 1.5, sm: 2 } }}>
+                <CardContent sx={{ py: { xs: 2, sm: 2.5 } }}>
                   <Box display="flex" alignItems="center">
-                    <CheckCircle sx={{ mr: 2, color: 'primary.main', fontSize: { xs: 20, sm: 24 } }} />
+                    <Avatar sx={{ 
+                      bgcolor: IHS_COLORS.orange, 
+                      mr: 2, 
+                      width: 32, 
+                      height: 32 
+                    }}>
+                      <CheckCircle sx={{ fontSize: 18 }} />
+                    </Avatar>
                     <Typography 
                       variant="body1"
-                      sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}
+                      sx={{ 
+                        fontSize: { xs: '0.9rem', sm: '1rem' },
+                        fontWeight: 600,
+                        color: IHS_COLORS.primary
+                      }}
                     >
                       Manage Jobs
                     </Typography>
@@ -505,11 +734,23 @@ const Dashboard = () => {
 
         {/* Source of Hire Chart */}
         <Grid item xs={12} md={6} lg={4}>
-          <Paper sx={{ p: { xs: 2, sm: 3 }, height: { xs: 350, sm: 400 } }}>
+          <Paper sx={{ 
+            p: { xs: 3, sm: 4 }, 
+            height: { xs: 350, sm: 400 },
+            borderRadius: 3,
+            boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+            border: '1px solid rgba(0,0,0,0.05)',
+            background: 'white'
+          }}>
             <Typography 
               variant="h6" 
               gutterBottom
-              sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}
+              sx={{ 
+                fontSize: { xs: '1.1rem', sm: '1.25rem' },
+                fontWeight: 700,
+                color: IHS_COLORS.primary,
+                mb: 2
+              }}
             >
               Source of Hire
             </Typography>
@@ -535,11 +776,23 @@ const Dashboard = () => {
 
         {/* Rejection Reasons Chart */}
         <Grid item xs={12} md={6} lg={4}>
-          <Paper sx={{ p: { xs: 2, sm: 3 }, height: { xs: 350, sm: 400 } }}>
+          <Paper sx={{ 
+            p: { xs: 3, sm: 4 }, 
+            height: { xs: 350, sm: 400 },
+            borderRadius: 3,
+            boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+            border: '1px solid rgba(0,0,0,0.05)',
+            background: 'white'
+          }}>
             <Typography 
               variant="h6" 
               gutterBottom
-              sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}
+              sx={{ 
+                fontSize: { xs: '1.1rem', sm: '1.25rem' },
+                fontWeight: 700,
+                color: IHS_COLORS.primary,
+                mb: 2
+              }}
             >
               Rejection Reasons
             </Typography>
@@ -562,11 +815,23 @@ const Dashboard = () => {
 
         {/* Time to Hire Chart */}
         <Grid item xs={12} md={6} lg={4}>
-          <Paper sx={{ p: { xs: 2, sm: 3 }, height: { xs: 350, sm: 400 } }}>
+          <Paper sx={{ 
+            p: { xs: 3, sm: 4 }, 
+            height: { xs: 350, sm: 400 },
+            borderRadius: 3,
+            boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+            border: '1px solid rgba(0,0,0,0.05)',
+            background: 'white'
+          }}>
             <Typography 
               variant="h6" 
               gutterBottom
-              sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}
+              sx={{ 
+                fontSize: { xs: '1.1rem', sm: '1.25rem' },
+                fontWeight: 700,
+                color: IHS_COLORS.primary,
+                mb: 2
+              }}
             >
               Time to Hire
             </Typography>
@@ -587,8 +852,9 @@ const Dashboard = () => {
           </Paper>
         </Grid>
       </Grid>
-    </Container>
-  );
+        </Container>
+      </Box>
+    );
 };
 
 export default Dashboard;

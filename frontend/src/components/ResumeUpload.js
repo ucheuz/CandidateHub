@@ -13,7 +13,8 @@ import {
   CardContent,
   Chip,
   Divider,
-  IconButton
+  IconButton,
+  TextField
 } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
@@ -33,6 +34,16 @@ const ResumeUpload = () => {
   const [success, setSuccess] = useState(false);
   const [jobDetails, setJobDetails] = useState(null);
   const [dragActive, setDragActive] = useState(false);
+  const [candidateForm, setCandidateForm] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    location: '',
+    expectedSalary: '',
+    coverLetter: '',
+    source: 'Direct'  // HR-added candidates are "Direct"
+  });
   const navigate = useNavigate();
   const { jobId } = useParams();
 
@@ -134,18 +145,19 @@ const ResumeUpload = () => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('job_id', jobId);
+    formData.append('candidate_data', JSON.stringify(candidateForm));
 
     try {
       console.log('Uploading file:', file.name, 'Size:', file.size, 'Type:', file.type);
       const response = await axiosInstance.post('/api/resume/upload', formData);
 
       if (response.status === 201) {
-        const { id: resumeId } = response.data;
+        const { candidate_id } = response.data;
         setSuccess(true);
         setTimeout(() => {
-          navigate(`/evaluation/${jobId}/${resumeId}`);
+          navigate(`/candidates/${candidate_id}`);
         }, 1500);
-        return resumeId;
+        return candidate_id;
       }
     } catch (error) {
       console.error('Upload error:', error);
@@ -350,7 +362,7 @@ const ResumeUpload = () => {
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                       <CheckCircleIcon sx={{ color: 'success.main', fontSize: 20 }} />
                       <Typography variant="body2" color="success.main">
-                        Upload successful! Redirecting to evaluation...
+                        Candidate created successfully! Redirecting to evaluation...
                       </Typography>
                     </Box>
                   )}
@@ -359,10 +371,96 @@ const ResumeUpload = () => {
                     <Box sx={{ mb: 2 }}>
                       <LinearProgress sx={{ borderRadius: 1 }} />
                       <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                        Uploading and processing resume...
+                        Uploading resume, creating candidate, and performing AI evaluation...
                       </Typography>
                     </Box>
                   )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Candidate Information Form */}
+            {file && (
+              <Card 
+                elevation={1} 
+                sx={{ 
+                  width: '100%', 
+                  maxWidth: 500,
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  mb: 2
+                }}
+              >
+                <CardContent sx={{ p: 3 }}>
+                  <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, mb: 3 }}>
+                    Candidate Information
+                  </Typography>
+                  
+                  <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mb: 2 }}>
+                    <TextField
+                      label="First Name"
+                      value={candidateForm.firstName}
+                      onChange={(e) => setCandidateForm(prev => ({ ...prev, firstName: e.target.value }))}
+                      required
+                      size="small"
+                      fullWidth
+                    />
+                    <TextField
+                      label="Last Name"
+                      value={candidateForm.lastName}
+                      onChange={(e) => setCandidateForm(prev => ({ ...prev, lastName: e.target.value }))}
+                      required
+                      size="small"
+                      fullWidth
+                    />
+                  </Box>
+                  
+                  <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mb: 2 }}>
+                    <TextField
+                      label="Email"
+                      type="email"
+                      value={candidateForm.email}
+                      onChange={(e) => setCandidateForm(prev => ({ ...prev, email: e.target.value }))}
+                      required
+                      size="small"
+                      fullWidth
+                    />
+                    <TextField
+                      label="Phone"
+                      value={candidateForm.phone}
+                      onChange={(e) => setCandidateForm(prev => ({ ...prev, phone: e.target.value }))}
+                      size="small"
+                      fullWidth
+                    />
+                  </Box>
+                  
+                  <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mb: 2 }}>
+                    <TextField
+                      label="Location"
+                      value={candidateForm.location}
+                      onChange={(e) => setCandidateForm(prev => ({ ...prev, location: e.target.value }))}
+                      size="small"
+                      fullWidth
+                    />
+                    <TextField
+                      label="Expected Salary"
+                      value={candidateForm.expectedSalary}
+                      onChange={(e) => setCandidateForm(prev => ({ ...prev, expectedSalary: e.target.value }))}
+                      size="small"
+                      fullWidth
+                    />
+                  </Box>
+                  
+                  <TextField
+                    label="Cover Letter (Optional)"
+                    value={candidateForm.coverLetter}
+                    onChange={(e) => setCandidateForm(prev => ({ ...prev, coverLetter: e.target.value }))}
+                    multiline
+                    rows={3}
+                    size="small"
+                    fullWidth
+                    sx={{ mb: 2 }}
+                  />
                 </CardContent>
               </Card>
             )}
@@ -400,7 +498,7 @@ const ResumeUpload = () => {
               <Button
                 variant="contained"
                 type="submit"
-                disabled={!file || loading || success}
+                disabled={!file || loading || success || !candidateForm.firstName || !candidateForm.lastName || !candidateForm.email}
                 size="large"
                 sx={{ 
                   px: 4,
@@ -409,7 +507,7 @@ const ResumeUpload = () => {
                   fontWeight: 500
                 }}
               >
-                {loading ? 'Uploading...' : success ? 'Uploaded!' : 'Upload Resume'}
+                {loading ? 'Uploading...' : success ? 'Uploaded!' : 'Upload Resume & Add Candidate'}
               </Button>
             </Box>
           </Box>

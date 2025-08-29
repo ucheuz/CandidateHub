@@ -4,13 +4,13 @@ import axios from 'axios';
 const axiosInstance = axios.create({
   baseURL: process.env.NODE_ENV === 'development' 
     ? 'http://localhost:8000'  // Use local backend in development (avoiding macOS ControlCenter on 5000)
-    : '',  // Use relative URLs in production (nginx will proxy to backend)
+    : 'https://candidatehubapiv2.azurewebsites.net',  // Use production backend URL
 });
 
 // Log the configuration for debugging (development only)
 if (process.env.NODE_ENV === 'development') {
   console.log('Axios Instance Config:', {
-    baseURL: process.env.NODE_ENV === 'production' ? 'relative URLs' : 'http://localhost:5000',
+    baseURL: process.env.NODE_ENV === 'development' ? 'http://localhost:8000' : 'relative URLs',
     environment: process.env.NODE_ENV
   });
 }

@@ -56,7 +56,7 @@ import SmartToyIcon from '@mui/icons-material/SmartToy';
 import QuestionAnswerIcon from '@mui/icons-material/QuestionAnswer';
 import PolicyIcon from '@mui/icons-material/Policy';
 import NotificationsIcon from '@mui/icons-material/Notifications';
-import axios from 'axios';
+import axiosInstance from '../api/axiosInstance';
 
 const EnhancedJobForm = () => {
   const navigate = useNavigate();
@@ -243,7 +243,7 @@ const EnhancedJobForm = () => {
     try {
       setSyncStatus('syncing');
       
-      const response = await axios.post('/api/smartrecruiters/sync-job', {
+              const response = await axiosInstance.post('/api/smartrecruiters/sync-job', {
         job_id: jobId,
         job_data: jobData
       });

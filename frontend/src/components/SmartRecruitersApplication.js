@@ -23,7 +23,7 @@ import {
   Paper
 } from '@mui/material';
 import { Send, CheckCircle, Error, Info } from '@mui/icons-material';
-import axios from 'axios';
+import axiosInstance from '../api/axiosInstance';
 
 const SmartRecruitersApplication = ({ jobId, postingUuid, candidateData, onSubmissionComplete }) => {
   const [configuration, setConfiguration] = useState(null);
@@ -45,7 +45,7 @@ const SmartRecruitersApplication = ({ jobId, postingUuid, candidateData, onSubmi
       setLoading(true);
       setError(null);
 
-      const response = await axios.get(
+      const response = await axiosInstance.get(
         `/api/smartrecruiters/posting/${postingUuid}/config`
       );
 
@@ -170,7 +170,7 @@ const SmartRecruitersApplication = ({ jobId, postingUuid, candidateData, onSubmi
         consent_decisions: consentDecisions
       };
 
-      const response = await axios.post(
+      const response = await axiosInstance.post(
         `/api/smartrecruiters/posting/${postingUuid}/apply`,
         applicationData
       );
